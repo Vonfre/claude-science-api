@@ -1844,7 +1844,7 @@ def _production_dependencies(root_fd: int) -> SourceRuntimeDependencies:
                 records["NODE"] = _tool_record(node)
                 tool_paths["NODE"] = node
                 break
-            except SourceRuntimeError:
+            except (SourceRuntimeError, OSError):
                 continue
         else:
             raise SourceRuntimeError("reviewed Node executable unavailable")
@@ -1853,7 +1853,7 @@ def _production_dependencies(root_fd: int) -> SourceRuntimeDependencies:
             paths = {name: os.path.join(rust_bin, name.lower()) for name in ("CARGO", "RUSTC")}
             try:
                 pair = {name: _tool_record(path) for name, path in paths.items()}
-            except SourceRuntimeError:
+            except (SourceRuntimeError, OSError):
                 continue
             tool_paths.update(paths)
             records.update(pair)
