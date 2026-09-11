@@ -64,7 +64,7 @@ class ProfilePinContractTests(unittest.TestCase):
             r",?\s*\)\);\s*\}\s*\};",
         )
         handler = (ROOT / "desktop/src-tauri/src/lib.rs").read_text().split(
-            ".invoke_handler(tauri::generate_handler![", 1
+            "tauri::generate_handler![", 1
         )[1].split(
             "])\n", 1
         )[0]
@@ -121,7 +121,7 @@ class ProfilePinContractTests(unittest.TestCase):
 
         self.assertIn('call("set_active_profile", { id })', activate)
         self.assertIn("当前选择", activate)
-        self.assertIn("待一键开始核验并应用", activate)
+        self.assertIn("待启动 Science核验并应用", activate)
         self.assertNotIn("skipVerify", js)
         self.assertNotIn("can_skip", js)
         self.assertNotIn("pendingSkipActivateId", js)
@@ -153,8 +153,8 @@ class ProfilePinContractTests(unittest.TestCase):
         self.assertIn('isExactActiveProfileIntent(r, intent, id)', activate)
         self.assertNotIn("r.hint", activate)
         self.assertIn("当前选择", boundary)
-        self.assertIn("当前选择 · 待一键开始应用", js)
-        self.assertIn(">上次应用</span>", js)
+        self.assertIn('pending ? "待应用 · 启动后生效" : "上次已应用"', js)
+        self.assertIn('applied ? "上次应用" : ""', js)
         command = (ROOT / "desktop/src-tauri/src/commands/profiles.rs").read_text().split(
             "pub(crate) async fn set_active_profile(", 1
         )[1].split("\n}", 1)[0]

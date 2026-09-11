@@ -6,7 +6,7 @@
 
 [中文](README.md) · [English](README.en.md)
 
-[Download v0.9.0](https://github.com/Vonfre/claude-science-api/releases/tag/v0.9.0) · [Report an issue](https://github.com/Vonfre/claude-science-api/issues) · [Documentation](docs/README.md)
+[Download v0.9.1](https://github.com/Vonfre/claude-science-api/releases/tag/v0.9.1) · [Report an issue](https://github.com/Vonfre/claude-science-api/issues) · [Documentation](docs/README.md)
 
 </div>
 
@@ -25,13 +25,13 @@ SciPort is a local API connection manager and launcher for Claude Science. This 
 - **Honest status reporting:** Gateway health, Science health, and upstream network reachability are separate. A reachable network does not prove a valid API key.
 - **A simpler interface:** workbench and settings, light/dark themes, and collapsible diagnostics and logs.
 
-> **Validation status:** At the maintainer’s request, this release is built and published with GitHub Actions without automated test suites. Hands-on testing is left to the maintainer. The earlier local candidate did not pass the complete test gate; full source-gate closure is not claimed. A successful build only means an installer was produced, not that all features are verified.
+> **Validation status:** v0.9.1 fixes release-note generation. GitHub runs frontend and release-notes checks before building. The full source gate, real Science runtime, and live providers remain unverified. Installer availability depends on a successful Actions run; a successful build is not proof of complete functionality.
 
 ## Download and install
 
 This release provides a **macOS Apple Silicon (M-series, arm64)** package. Intel Mac, Windows, and Linux packages are not provided or validated.
 
-1. Download `SciPort_0.9.0_aarch64.dmg` from the [v0.9.0 Release](https://github.com/Vonfre/claude-science-api/releases/tag/v0.9.0).
+1. Download `SciPort_0.9.1_aarch64.dmg` from the [v0.9.1 Release](https://github.com/Vonfre/claude-science-api/releases/tag/v0.9.1).
 2. Install Claude Science through its official distribution channel first. SciPort does not bundle, download, or automatically update Science.
 3. Open the DMG and drag **SciPort.app** into Applications.
 4. Open SciPort and add an API connection.
@@ -86,7 +86,7 @@ Requirements: macOS, Xcode Command Line Tools, Node.js/npm, and a Rust toolchain
 ```bash
 git clone https://github.com/Vonfre/claude-science-api.git
 cd claude-science-api
-git checkout v0.9.0
+git checkout v0.9.1
 npm ci --prefix desktop
 npm run tauri --prefix desktop -- build --bundles app
 ```

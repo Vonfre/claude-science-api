@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.1] — 2026-09-11
+
+修复打包脚本中 Release tag 紧邻中文标点导致的 unbound variable；使用显式变量边界。构建前新增发布说明渲染与前端回归检查，更新 API-only 界面的旧契约断言。完整源码门禁、macOS runtime 与真实供应商调用仍未验证；是否发布以 GitHub Release 实际结果为准。
+
+Fix release-note variable expansion next to Chinese punctuation. Add release-note rendering and frontend checks before packaging, and align legacy contract tests with the API-only surface. Full source-gate and live-runtime validation remain pending.
+
 
 ## [0.9.0] — 2026-09-11
 

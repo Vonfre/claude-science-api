@@ -49,7 +49,15 @@ jobs:
             if (JSON.parse(fs.readFileSync(path)).version !== expected) throw new Error(`Version mismatch: ${path}`);
           }
           JS
-      - name: Build the application and bundled Gateway (no test suites)
+      - name: Check frontend and release notes before building
+        shell: bash
+        run: |
+          set -euo pipefail
+          export HOME="$(mktemp -d "$RUNNER_TEMP/sciport-check-home.XXXXXX")"
+          bash -n scripts/package-sciport-release.sh
+          python3 test/test_release_notes.py -v
+          bash test/run-frontend.sh
+      - name: Build the application and bundled Gateway
         shell: bash
         run: |
           set -euo pipefail

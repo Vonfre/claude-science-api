@@ -2,11 +2,15 @@
 
 发布是逐层建立证据，不是一次 `build` 或一次 `gh release`。Agent 的授权禁止项见[发布规则](../../.agents/rules/release.md)。
 
+## SciPort v0.9.1 打包修复
+
+v0.9.1 在编译前新增前端与 Release 说明渲染回归检查，使用 `${RELEASE_TAG}` 明确中文标点前的变量边界。该聚焦检查不替代完整源码门禁，也不宣称真实 Science 或 provider 已验证。以下 v0.9.0 例外仅记录历史。
+
 ## SciPort v0.9.0 的维护者指定发布方式
 
 2026-09-11，维护者明确要求停止本地测试，先推送源码，由 GitHub 构建并发布安装包，再自行实际测试。本次是对下述标准源码门禁流程的一次明确例外，不改变后续版本的默认门禁，也不将之前失败的检查记为通过。README、Release 说明和 BUILD_INFO 必须保留未完成验证的披露。
 
-[GitHub 构建流程](../../.github/workflows/release.yml) 在版本 tag 上从同一 checkout 构建 desktop 与 Gateway，调用[打包脚本](../../scripts/package-sciport-release.sh)进行 ad-hoc 签名、版本/架构/DMG 白名单及字节一致性检查后发布。它不运行应用、Science、真实 provider 或测试套件；不保存 Actions 构建缓存与中间 artifact。公开同名 Release 不会被重跑覆盖。
+[GitHub 构建流程](../../.github/workflows/release.yml) 在版本 tag 上从同一 checkout 构建 desktop 与 Gateway，调用[打包脚本](../../scripts/package-sciport-release.sh)进行 ad-hoc 签名、版本/架构/DMG 白名单及字节一致性检查后发布。v0.9.1 工作流运行上述聚焦检查，但不运行应用、Science 或真实 provider；不保存 Actions 构建缓存与中间 artifact。公开同名 Release 不会被重跑覆盖。
 
 ## 1. 固定发布输入
 

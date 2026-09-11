@@ -1,6 +1,6 @@
 [package]
 name = "desktop"
-version = "0.9.0"
+version = "0.9.1"
 description = "SciPort — a local API workspace for Claude Science"
 authors = ["CSSwitch"]
 edition = "2021"

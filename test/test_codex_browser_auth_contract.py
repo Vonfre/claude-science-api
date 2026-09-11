@@ -20,12 +20,16 @@ def frontend_source():
 
 
 class CodexBrowserAuthContractTest(unittest.TestCase):
-    def test_packaged_ui_has_one_browser_login_entry(self):
+    def test_packaged_api_only_ui_has_no_account_login_entry(self):
         html = (ROOT / "desktop/src/index.html").read_text()
         js = frontend_source()
+        tauri = (ROOT / "desktop/src-tauri/src/lib.rs").read_text()
+        handler = tauri.split('tauri::generate_handler![', 1)[1].split(']))', 1)[0]
 
-        self.assertIn('id="codexLoginBtn"', html)
-        self.assertIn("浏览器登录 Codex", html)
+        self.assertNotIn('id="codexLoginBtn"', html)
+        self.assertNotIn("浏览器登录 Codex", html)
+        self.assertNotIn('commands::codex::', handler)
+        self.assertIn('.invoke_handler(main_window_commands(', tauri)
         self.assertNotIn("codexDeviceLoginBtn", html + js)
         self.assertNotIn("codexBrowserLoginBtn", html + js)
         self.assertNotIn("设备码登录", html + js)
@@ -48,14 +52,14 @@ class CodexBrowserAuthContractTest(unittest.TestCase):
         js = frontend_source()
         tauri = (ROOT / "desktop/src-tauri/src/lib.rs").read_text()
 
-        self.assertIn('id="codexRepairProfileBtn"', html)
-        self.assertIn("无需重新登录", html)
+        self.assertNotIn('id="codexRepairProfileBtn"', html)
         self.assertIn('call("codex_ensure_profile")', js)
         self.assertIn("profile_ensure_failed", js)
         self.assertIn('disposition === "created"', js)
         self.assertIn("已在后端补建，但界面刷新或回读确认失败", js)
         self.assertIn("不要重复补建", js)
-        self.assertIn("commands::codex::codex_ensure_profile", tauri)
+        handler = tauri.split('tauri::generate_handler![', 1)[1].split(']))', 1)[0]
+        self.assertNotIn("commands::codex::codex_ensure_profile", handler)
         dom_ready = main.split('window.addEventListener("DOMContentLoaded"', 1)[1]
         self.assertNotIn("refreshCodexAuthStatus", dom_ready)
         self.assertIn("refreshCodexAuthStatus({ quiet: true })", js)
