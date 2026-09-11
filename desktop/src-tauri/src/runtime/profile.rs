@@ -164,6 +164,7 @@ pub(crate) fn build_get_config(dir: &Path) -> Result<serde_json::Value, String> 
         "profiles": profiles,
         "templates": build_list_templates(cfg.experimental_codex_enabled), "proxy_port": cfg.proxy_port,
         "sandbox_port": cfg.sandbox_port, "reuse_system_ssh": cfg.reuse_system_ssh,
+        "allow_science_host_home": cfg.allow_science_host_home,
         "experimental_codex_enabled": cfg.experimental_codex_enabled,
         "codex_network": cfg.codex_network,
         "codex_network_resolved": resolved_codex_network,
@@ -860,12 +861,12 @@ pub(crate) fn probe_kind_for_model(model: &str) -> scratch::ProbeKind {
 mod tests {
     use super::{
         acknowledge_pending_notice_inner, build_get_config, build_list_templates,
-        clear_profile_key_inner, create_profile_inner,
-        delete_profile_inner, ensure_codex_profile_inner, is_canonical_codex_profile,
-        is_main_list_model, merge_and_sort_models, nonactive_probe_verdict,
-        persist_profile_candidate_inner, probe_kind_for, probe_kind_for_model,
-        profile_capabilities, template_capabilities, update_profile_connection_inner,
-        update_profile_metadata_inner, CatalogEdit, ConnectionEdit, EnsureCodexProfileDisposition,
+        clear_profile_key_inner, create_profile_inner, delete_profile_inner,
+        ensure_codex_profile_inner, is_canonical_codex_profile, is_main_list_model,
+        merge_and_sort_models, nonactive_probe_verdict, persist_profile_candidate_inner,
+        probe_kind_for, probe_kind_for_model, profile_capabilities, template_capabilities,
+        update_profile_connection_inner, update_profile_metadata_inner, CatalogEdit,
+        ConnectionEdit, EnsureCodexProfileDisposition,
     };
     use crate::{
         config,

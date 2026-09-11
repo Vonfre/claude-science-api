@@ -34,6 +34,59 @@ ZERO = "0" * 64
 
 
 class SourceGateRuntime(unittest.TestCase):
+    def test_reviewed_python_requires_exact_apple_toolchain_pair(self):
+        pairs = [
+            (source_runtime._REVIEWED_PYTHON_ENTRY_PATH,
+             source_runtime._REVIEWED_PYTHON_PROCESS_IMAGE_PATH),
+            (source_runtime._REVIEWED_CLT_PYTHON_ENTRY_PATH,
+             source_runtime._REVIEWED_CLT_PYTHON_PROCESS_IMAGE_PATH),
+        ]
+        accepts = source_runtime._python_identity_is_reviewed
+        for entry, image in pairs:
+            self.assertTrue(accepts(entry, image, None, None))
+            self.assertFalse(accepts(entry + ".replacement", image, None, None))
+            self.assertFalse(accepts(entry, image + ".replacement", None, None))
+        self.assertFalse(accepts(pairs[0][0], pairs[1][1], None, None))
+        self.assertFalse(accepts(pairs[1][0], pairs[0][1], None, None))
+        self.assertFalse(accepts("/usr/local/bin/python3", "/tmp/python", None, None))
+        self.assertFalse(accepts(pairs[0][0], pairs[0][1], pairs[0][0], None))
+
+    def test_locked_wheel_preparation_rejects_drift_traversal_and_overwrite(self):
+        import importlib.util
+        import zipfile
+        spec = importlib.util.spec_from_file_location(
+            "prepare_gate_python", REPO_ROOT / "scripts/prepare-source-gate-python.py",
+        )
+        setup = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(setup)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wheels = root / "wheels"
+            wheels.mkdir()
+            wheel = wheels / "fixture-1.0-py3-none-any.whl"
+            lock = root / "locked.txt"
+            destination = root / "cache" / "site-packages"
+            def write_wheel(member):
+                with zipfile.ZipFile(wheel, "w") as archive:
+                    archive.writestr(member, b"fixture")
+                lock.write_text("fixture==1.0 --hash=sha256:" +
+                                hashlib.sha256(wheel.read_bytes()).hexdigest() + "\n")
+            write_wheel("fixture/__init__.py")
+            wheel.write_bytes(wheel.read_bytes() + b"drift")
+            with self.assertRaisesRegex(ValueError, "digest mismatch"):
+                setup.prepare(wheels, destination, lock)
+            self.assertFalse(destination.exists())
+            write_wheel("../escape")
+            with self.assertRaisesRegex(ValueError, "unsafe wheel"):
+                setup.prepare(wheels, destination, lock)
+            self.assertFalse((root / "cache" / "escape").exists())
+            self.assertFalse(destination.exists())
+            write_wheel("fixture/__init__.py")
+            setup.prepare(wheels, destination, lock)
+            self.assertEqual((destination / "fixture/__init__.py").read_bytes(), b"fixture")
+            with self.assertRaisesRegex(ValueError, "already exists"):
+                setup.prepare(wheels, destination, lock)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(
             dir=os.path.realpath(tempfile.gettempdir()),
@@ -366,7 +419,7 @@ class SourceGateRuntime(unittest.TestCase):
             if plan.suite["id"] == "SUITE-RUST-DESKTOP"
         )
         bound = source_runtime._source_observation_size_bound(desktop)
-        self.assertEqual(len(desktop.expected_test_ids), 655)
+        self.assertEqual(len(desktop.expected_test_ids), 672)
         self.assertGreater(bound, 64 * 1024)
         self.assertLessEqual(
             bound,

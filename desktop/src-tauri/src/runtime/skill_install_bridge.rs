@@ -1016,9 +1016,7 @@ mod tests {
         let started = Instant::now();
         let error = run_bounded_control_command(
             command,
-            Instant::now()
-                .checked_add(Duration::from_secs(10))
-                .unwrap(),
+            Instant::now().checked_add(Duration::from_secs(10)).unwrap(),
             THIRD_PARTY_CONTROL_OUTPUT_LIMIT,
             THIRD_PARTY_CONTROL_OUTPUT_LIMIT,
         )

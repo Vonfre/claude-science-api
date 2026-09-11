@@ -134,6 +134,12 @@
                 <div class="field"><label for="sandboxPort">Science 端口</label><input id="sandboxPort" inputmode="numeric" value="8990" /></div>
               </div>
               <div class="permission-card">
+                <label class="ssh-bridge-toggle" for="allowScienceHostHome"><input id="allowScienceHostHome" type="checkbox" /><span>我同意 Science 使用本机真实主目录</span></label>
+                <p>默认关闭，使用隔离 HOME。启用后，Science 可提供本机主目录浏览；官方程序也可能在加载独立配置前检查或迁移真实主目录中的历史 Science 数据。</p>
+                <p>独立 data/auth 目录不等于绝不访问真实主目录。研舟不复制官方凭证，也不授予整个主目录读写权限；具体读写仍由 Science 确认。勾选并保存即表示接受上述行为。</p>
+                <p>启用或撤销会停止当前服务，需重新启动；撤销不会回滚 Science 已执行的操作。</p>
+              </div>
+              <div class="permission-card">
                 <label class="ssh-bridge-toggle" for="reuseSystemSsh"><input id="reuseSystemSsh" type="checkbox" /><span>允许隔离 Science 使用系统 SSH 配置</span></label>
                 <p>启用后，Science 调用系统 OpenSSH 时会读取你的 <code>~/.ssh/config</code>。研舟不复制整个 <code>.ssh</code>，也不启动 sshd 或开放端口。</p>
                 <p>这相当于授权该隔离 Science 实例使用已有 SSH 身份；更改后需要重新启动 Science。</p>

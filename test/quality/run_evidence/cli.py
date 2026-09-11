@@ -116,32 +116,32 @@ _DISTRIBUTIONS = {
     "jsonschema": (
         "4.25.1",
         "jsonschema-4.25.1.dist-info",
-        "00adda22c7e8876c9f9144a35d7217d0ac3e18dec5f4c9163ce563038f54bf1c",
+        "3f28341a55690fa428e0a45a3c266d32ce996bc19f37d6c62269799925b05923",
     ),
     "attrs": (
         "26.1.0",
         "attrs-26.1.0.dist-info",
-        "44ffe016f8ee38bcf9a63f7e2b293c444bb3d2e0ff94287c84a9216a936be14f",
+        "ece8bf0367609a064951bcf56a1697d8c61b674d0ce7a7d57e0a93777d86b4af",
     ),
     "referencing": (
         "0.36.2",
         "referencing-0.36.2.dist-info",
-        "0dc8202d8c351d0f8c272ab0f43e623f3a8426d177739b84cfd81d415cb2c288",
+        "d523198c6ea5fdcb2ff84e7bf84046bbb47e97dda4ef38c04f1e08db4fb43165",
     ),
     "jsonschema_specifications": (
         "2025.9.1",
         "jsonschema_specifications-2025.9.1.dist-info",
-        "798a9eec35fba88a0efbe59dac80ba5c6a02d6d9859c2d67ce0357d8f6c26925",
+        "497d6b8e47548e7fb8e66a8fcefcb717ed1458602e09662719066ce7dfc017dd",
     ),
     "rpds_py": (
         "0.27.1",
         "rpds_py-0.27.1.dist-info",
-        "e89f4ba46a2bb19fe5b52cee72ef8049e953d8e1828f84483a41f1feb2b6079d",
+        "896da66c12bc9f68a43d46525befef89ddd6b8a70ce0c3e6105892d50075a555",
     ),
     "typing_extensions": (
         "4.14.1",
         "typing_extensions-4.14.1.dist-info",
-        "9c3c254bc029c11fa3c2eb521843d4b6bc86c5ad638e1fde791cbf602af399f7",
+        "86de265628d5f9ba504f46c61cd3d914549d3ff0af9b78cd9c90bbb65cfbc39d",
     ),
 }
 _MODULES = {
@@ -293,11 +293,8 @@ def _dependency_bootstrap() -> tuple[str, list[dict[str, Any]]]:
         account = pwd.getpwuid(os.geteuid())
         site_root = os.path.join(
             account.pw_dir,
-            "Library",
-            "Python",
-            "{}.{}".format(sys.version_info.major, sys.version_info.minor),
-            "lib",
-            "python",
+            "Library", "Caches", "SciPort", "source-gate",
+            "python{}.{}-wheels-v1".format(sys.version_info.major, sys.version_info.minor),
             "site-packages",
         )
         if os.path.realpath(site_root) != site_root:
@@ -321,18 +318,9 @@ def _dependency_bootstrap() -> tuple[str, list[dict[str, Any]]]:
                     raise _PreflightError("dependency RECORD malformed")
                 logical, declared_hash, declared_size = row
                 relative = PurePosixPath(logical)
-                outside_cache = ".." in relative.parts
-                if outside_cache:
-                    if not declared_hash and not declared_size:
-                        rows.append(
-                            {"path": logical, "sha256": None, "size": None},
-                        )
-                        continue
-                    target = (Path(site_root) / logical).resolve()
-                    if not str(target).startswith(account.pw_dir + os.sep):
-                        raise _PreflightError("external dependency payload")
-                else:
-                    target = Path(site_root) / logical
+                if ".." in relative.parts:
+                    raise _PreflightError("external dependency payload")
+                target = Path(site_root) / logical
                 if relative.is_absolute() or "." in relative.parts:
                     raise _PreflightError("dependency RECORD path")
                 payload, item = _read_regular(target)

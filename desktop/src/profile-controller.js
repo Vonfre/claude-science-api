@@ -319,12 +319,14 @@ async function loadConfig(options) {
     getConfigState().proxy_port = cfg.proxy_port ?? 18991;
     getConfigState().sandbox_port = cfg.sandbox_port ?? 8990;
     getConfigState().reuse_system_ssh = !!cfg.reuse_system_ssh;
+    getConfigState().allow_science_host_home = cfg.allow_science_host_home === true;
     getConfigState().experimental_codex_enabled = !!cfg.experimental_codex_enabled;
     getConfigState().codex_network = cfg.codex_network || { mode: "auto", proxy_url: "" };
     getConfigState().codex_network_resolved = cfg.codex_network_resolved || { source: "direct", proxy_scheme: null };
     els.proxyPort.value = getConfigState().proxy_port;
     els.sandboxPort.value = getConfigState().sandbox_port;
     els.reuseSystemSsh.checked = getConfigState().reuse_system_ssh;
+    els.allowScienceHostHome.checked = getConfigState().allow_science_host_home;
     applyMode(cfg.mode === "official" ? "official" : "proxy");
     renderList();
     showView("list");
@@ -649,15 +651,17 @@ async function persistRuntimeSettings() {
   }
   const [p, s] = values.map(Number);
   const reuseSystemSsh = !!els.reuseSystemSsh.checked;
+  const allowScienceHostHome = els.allowScienceHostHome.checked === true;
   const portsChanged = p !== getConfigState().proxy_port || s !== getConfigState().sandbox_port;
   const sshChanged = reuseSystemSsh !== getConfigState().reuse_system_ssh;
-  const changed = portsChanged || sshChanged;
+  const homeChanged = allowScienceHostHome !== getConfigState().allow_science_host_home;
+  const changed = portsChanged || sshChanged || homeChanged;
   // 本次端口提交全程置忙：仅靠开头的 `if (isBusy()) return` 只挡「已在忙时进入」，挡不住本函数在途
   // 时其它操作（切模式/一键/连接编辑）启动。置忙 + 禁用控件才能保证操作顺序符合用户预期。修 GPT 三轮 P2
   setBusy(true, { kind: "ports" });
   startPortSaveFeedback(changed);
   try {
-    const result = await call("set_settings", { cfg: { proxy_port: p, sandbox_port: s, reuse_system_ssh: reuseSystemSsh } });
+    const result = await call("set_settings", { cfg: { proxy_port: p, sandbox_port: s, reuse_system_ssh: reuseSystemSsh, allow_science_host_home: allowScienceHostHome } });
     const outcome = parseConfigMutationResponse(result);
     const validOutcome =
       isExactConfigIntent(outcome, "set_settings", ["committed", "no_change"]) ||
@@ -672,24 +676,28 @@ async function persistRuntimeSettings() {
     getConfigState().proxy_port = p;
     getConfigState().sandbox_port = s;
     getConfigState().reuse_system_ssh = reuseSystemSsh;
+    getConfigState().allow_science_host_home = allowScienceHostHome;
     // set_settings invalidates backend history-recovery references even when
     // the submitted values are unchanged, so never leave stale buttons visible.
     runtime.hideHistoryRecovery();
     // 后端在端口变化时会拆掉旧代理/沙箱（否则会复用指向旧端口的死链路），如实告知需重开。修 P1-c
     if (changed) {
-      setMsg(sshChanged
+      setMsg(homeChanged
+        ? "主目录授权已保存。正在运行的代理/沙箱已重置，请重新「启动 Science」。"
+        : sshChanged
         ? "SSH 授权设置已保存。正在运行的代理/沙箱已重置，请重新「启动 Science」。"
         : "端口已保存。改端口会重置正在运行的代理/沙箱，请重新「启动 Science」。", "ok");
       await runtime.refreshStatus();
       await getSkillPage()?.refreshIfLoaded();
     } else {
-      setMsg("端口未变化。", "ok");
+      setMsg("运行设置未变化。", "ok");
     }
   } catch (e) {
     // 出错＝端口未落盘（校验不过 / 停旧沙箱失败）：把输入框还原成实际生效值，避免显示未保存的数字。
     els.proxyPort.value = getConfigState().proxy_port;
     els.sandboxPort.value = getConfigState().sandbox_port;
     els.reuseSystemSsh.checked = getConfigState().reuse_system_ssh;
+    els.allowScienceHostHome.checked = getConfigState().allow_science_host_home;
     setMsg(mutationErrorText(e), "err");
   } finally {
     setBusy(false);

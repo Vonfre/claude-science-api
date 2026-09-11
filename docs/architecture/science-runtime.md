@@ -42,6 +42,14 @@ Gateway 进程就把它们都解释成 model routing：
 
 ### 本机 Home 浏览与独立状态
 
+默认（含缺字段的旧版升级）保持隔离 HOME。设置中的明确授权复选框映射到
+`Config.allow_science_host_home`，只有 JSON 布尔 `true` 才启用；默认 false 不序列化，
+不改变未授权旧配置的事务 fingerprint。变更该授权走已有串行 `set_settings` 事务，
+启用或撤销都会先停止现有 Science / Gateway；停止失败不提交新值。撤销不回滚
+官方程序已经执行的操作。cold start、recovery 和 auto start 使用同一已保存值，
+共同经过 `configure_science_home_access`；未授权时既不准备 Home 配置也不设置
+host-home 标志，不从旧配置或环境变量推断同意。
+
 经用户明确接受官方 Home 行为后，Desktop cold start / recovery 由
 `runtime/science/home_layout.rs::prepare_science_host_home` 准备隔离配置，再由
 `ScienceHostAdapter::spawn_launch` 启用 daemon 的真实 host `HOME`。Science 原生

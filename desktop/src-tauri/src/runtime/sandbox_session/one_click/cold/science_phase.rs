@@ -107,6 +107,7 @@ pub(super) fn run_managed_science_launch_phase<R: Runtime>(
             sport,
             &proxy_url,
             cfg.reuse_system_ssh,
+            cfg.allow_science_host_home,
             &ssh_hosts,
             Some(opaque_bindings.as_str()),
             operation::SANDBOX_HEALTH_BUDGET_MS,

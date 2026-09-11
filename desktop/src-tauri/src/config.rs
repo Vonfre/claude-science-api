@@ -1620,6 +1620,10 @@ pub struct Profile {
     pub extra: BTreeMap<String, serde_json::Value>,
 }
 
+fn home_access_not_accepted(accepted: &bool) -> bool {
+    !accepted
+}
+
 /// 顶层配置。字段都有默认值，缺字段的旧文件也能读。
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Config {
@@ -1638,6 +1642,10 @@ pub struct Config {
     /// 默认关闭；不复制或链接 `.ssh`，只在启动时注入受控 PATH wrapper。
     #[serde(default)]
     pub reuse_system_ssh: bool,
+    /// Explicit opt-in to Science using host HOME, including official pre-config migration.
+    /// Omit false to preserve existing config/transaction fingerprints on upgrade.
+    #[serde(default, skip_serializing_if = "home_access_not_accepted")]
+    pub allow_science_host_home: bool,
     /// 非官方 Codex → Science 桥接实验开关。默认关闭；关闭不删除 profile 或本地 OAuth。
     #[serde(default)]
     pub experimental_codex_enabled: bool,
@@ -1924,6 +1932,7 @@ impl Default for Config {
             proxy_port: default_proxy_port(),
             sandbox_port: default_sandbox_port(),
             reuse_system_ssh: false,
+            allow_science_host_home: false,
             experimental_codex_enabled: false,
             codex_network: csswitch_codex_network::CodexNetworkSettings::default(),
             secret: String::new(),
@@ -2492,6 +2501,7 @@ pub fn migrate_v3_to_v4(v3: crate::config_legacy::ConfigV3) -> io::Result<Config
         proxy_port: v3.proxy_port,
         sandbox_port: v3.sandbox_port,
         reuse_system_ssh: v3.reuse_system_ssh,
+        allow_science_host_home: false,
         experimental_codex_enabled: v3.experimental_codex_enabled,
         codex_network: v3.codex_network,
         secret: v3.secret,
@@ -4602,6 +4612,7 @@ fn validate_profile_contracts(cfg: &Config) -> io::Result<()> {
         "proxy_port",
         "sandbox_port",
         "reuse_system_ssh",
+        "allow_science_host_home",
         "experimental_codex_enabled",
         "codex_network",
         "secret",
@@ -5781,6 +5792,29 @@ mod tests {
     }
 
     // ---------- A1: 结构 + 访问器 + new_id/now_ms ----------
+    #[test]
+    fn home_access_consent_is_explicit_and_preserves_legacy_serialization() {
+        let default_config = Config::default();
+        assert!(!default_config.allow_science_host_home);
+        let legacy = serde_json::to_value(&default_config).unwrap();
+        assert!(legacy.get("allow_science_host_home").is_none());
+        let restored: Config = serde_json::from_value(legacy.clone()).unwrap();
+        assert!(!restored.allow_science_host_home);
+        assert_eq!(serde_json::to_value(&restored).unwrap(), legacy);
+        let mut accepted = restored;
+        accepted.allow_science_host_home = true;
+        let saved = serde_json::to_value(&accepted).unwrap();
+        assert_eq!(saved["allow_science_host_home"], true);
+        assert!(
+            serde_json::from_value::<Config>(saved.clone())
+                .unwrap()
+                .allow_science_host_home
+        );
+        let mut invalid = saved;
+        invalid["allow_science_host_home"] = serde_json::json!("true");
+        assert!(serde_json::from_value::<Config>(invalid).is_err());
+    }
+
     #[test]
     fn config_default_is_v4_empty() {
         let c = Config::default();

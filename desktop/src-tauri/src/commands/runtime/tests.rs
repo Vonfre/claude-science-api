@@ -5020,10 +5020,10 @@ fn gateway_spawn_production_race_preserves_replacement_and_candidate_side_effect
 fn s6_registered_start_proxy_is_absent_from_invoke_surface() {
     let app_source = include_str!("../../lib.rs");
     let registration = app_source
-        .split_once(".invoke_handler(tauri::generate_handler![")
+        .split_once(".invoke_handler(main_window_commands(tauri::generate_handler![")
         .map(|(_, suffix)| suffix)
         .expect("invoke handler must exist")
-        .split("])\n")
+        .split("]))\n")
         .next()
         .unwrap();
     assert!(!registration.contains("commands::runtime::start_proxy"));
@@ -9927,6 +9927,7 @@ fn p2a_codex_disable_fence_blocks_mode_and_settings_before_effects() {
         state,
         lifecycle,
         super::lifecycle::UiSettings {
+            allow_science_host_home: false,
             proxy_port: 18001,
             sandbox_port: 18766,
             reuse_system_ssh: false,
@@ -10164,6 +10165,7 @@ fn set_settings_rejects_config_commit_when_gateway_stop_is_uncertain() {
         state.clone(),
         lifecycle,
         super::lifecycle::UiSettings {
+            allow_science_host_home: false,
             proxy_port: 18001,
             sandbox_port: 18766,
             reuse_system_ssh: false,
@@ -10206,6 +10208,83 @@ fn set_settings_rejects_config_commit_when_gateway_stop_is_uncertain() {
         .retry_with(crate::runtime::system::stop_child_confirmed)
         .unwrap();
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+#[allow(clippy::result_large_err)]
+fn science_home_consent_change_stops_runtime_before_commit() {
+    for (before, accepted) in [(false, true), (true, false)] {
+        let root = tmpdir("science-home-consent-settings");
+        let config_dir = root.join("config");
+        let sandbox_home = root.join("sandbox");
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::create_dir_all(&sandbox_home).unwrap();
+        let cfg = Config {
+            mode: "proxy".into(),
+            proxy_port: 18000,
+            sandbox_port: 18765,
+            allow_science_host_home: before,
+            ..Default::default()
+        };
+        config::save_to(&config_dir, &cfg).unwrap();
+        let binary = root.join("fixture-science");
+        fs::write(&binary, b"#!/bin/sh\nexit 0\n").unwrap();
+        fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
+        let runtime = science::test_runtime_identity(binary);
+        let mut authority = AppState::default();
+        authority.science_runtime = Some(runtime.clone());
+        let state = Arc::new(Mutex::new(authority));
+        let lifecycle = Arc::new(lifecycle::Lifecycle::new());
+        let app = tauri::test::mock_builder()
+            .manage(state.clone())
+            .manage(lifecycle.clone())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let stopped = AtomicBool::new(false);
+        let result = super::lifecycle::set_settings_inner_with(
+            app.handle().clone(),
+            state.clone(),
+            lifecycle,
+            super::lifecycle::UiSettings {
+                proxy_port: cfg.proxy_port,
+                sandbox_port: cfg.sandbox_port,
+                reuse_system_ssh: false,
+                allow_science_host_home: accepted,
+            },
+            super::lifecycle::SetSettingsPaths {
+                config_dir: config_dir.clone(),
+                sandbox_home,
+            },
+            |current| Ok(science::ScienceStopRequest::recover(current)),
+            |_, _| {
+                assert_eq!(
+                    config::load_from(&config_dir)
+                        .unwrap()
+                        .allow_science_host_home,
+                    before
+                );
+                stopped.store(true, Ordering::SeqCst);
+                (
+                    Ok(science::VerifiedScienceStop {
+                        runtime: Some(runtime),
+                        ownership_was_proven: true,
+                    }),
+                    true,
+                )
+            },
+            AppState::stop_proxy,
+        );
+        assert!(result.is_ok(), "{result:?}");
+        assert!(stopped.load(Ordering::SeqCst));
+        assert!(lock(&state).science_runtime.is_none());
+        assert_eq!(
+            config::load_from(&config_dir)
+                .unwrap()
+                .allow_science_host_home,
+            accepted
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 }
 
 #[test]
@@ -10277,6 +10356,7 @@ fn r2_set_settings_wait_releases_read_model_and_stale_result_preserves_replaceme
                 worker_state,
                 worker_lifecycle,
                 super::lifecycle::UiSettings {
+                    allow_science_host_home: false,
                     proxy_port: 18001,
                     sandbox_port: 18766,
                     reuse_system_ssh: false,
@@ -10650,6 +10730,7 @@ fn isolated_r0_d_lifecycle_command_contract() {
             state.clone(),
             lifecycle.clone(),
             super::lifecycle::UiSettings {
+                allow_science_host_home: false,
                 proxy_port: free_port(),
                 sandbox_port: free_port(),
                 reuse_system_ssh: false,
@@ -10681,6 +10762,7 @@ fn isolated_r0_d_lifecycle_command_contract() {
             state.clone(),
             lifecycle.clone(),
             super::lifecycle::UiSettings {
+                allow_science_host_home: false,
                 proxy_port: free_port(),
                 sandbox_port: free_port(),
                 reuse_system_ssh: false,
@@ -10715,6 +10797,7 @@ fn isolated_r0_d_lifecycle_command_contract() {
             state.clone(),
             lifecycle.clone(),
             super::lifecycle::UiSettings {
+                allow_science_host_home: false,
                 proxy_port: free_port(),
                 sandbox_port: free_port(),
                 reuse_system_ssh: false,
@@ -10740,6 +10823,7 @@ fn isolated_r0_d_lifecycle_command_contract() {
             state.clone(),
             lifecycle,
             super::lifecycle::UiSettings {
+                allow_science_host_home: false,
                 proxy_port: free_port(),
                 sandbox_port: free_port(),
                 reuse_system_ssh: false,
@@ -10796,6 +10880,7 @@ fn isolated_r0_d_lifecycle_command_contract() {
             state.clone(),
             lifecycle.clone(),
             super::lifecycle::UiSettings {
+                allow_science_host_home: false,
                 proxy_port: free_port(),
                 sandbox_port: free_port(),
                 reuse_system_ssh: false,

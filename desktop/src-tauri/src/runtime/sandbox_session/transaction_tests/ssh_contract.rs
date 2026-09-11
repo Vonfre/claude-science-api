@@ -629,12 +629,11 @@ fn ssh_wrapper_prevalidation_uses_the_running_runtime_validator_before_oauth() {
             [
                 "std::env::var".to_string(),
                 "std::env::var".to_string(),
-                "std::env::var".to_string(),
                 "std::env::var_os".to_string(),
                 "std::env::var_os".to_string(),
                 "std::env::var_os".to_string(),
             ],
-            "product transaction source may reference only the existing spike seam, DB reverify/restart-budget seams, exact wrapper override, host-proof seam, and exact late-failure seam environment APIs"
+            "product transaction source may reference only the DB reverify/restart-budget seams, exact wrapper override, host-proof seam, and exact late-failure seam environment APIs"
         );
 
     for (name, function) in [

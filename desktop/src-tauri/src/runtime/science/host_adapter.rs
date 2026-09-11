@@ -190,6 +190,7 @@ pub(crate) struct ScienceLaunchSpec<'a> {
     port: u16,
     proxy_url: &'a str,
     reuse_system_ssh: bool,
+    allow_science_host_home: bool,
     system_ssh_hosts: &'a str,
     opaque_bindings: Option<&'a str>,
     health_budget: Duration,
@@ -207,6 +208,7 @@ impl<'a> ScienceLaunchSpec<'a> {
         port: u16,
         proxy_url: &'a str,
         reuse_system_ssh: bool,
+        allow_science_host_home: bool,
         system_ssh_hosts: &'a str,
         opaque_bindings: Option<&'a str>,
         health_budget_ms: u64,
@@ -219,6 +221,7 @@ impl<'a> ScienceLaunchSpec<'a> {
             port,
             proxy_url,
             reuse_system_ssh,
+            allow_science_host_home,
             system_ssh_hosts,
             opaque_bindings,
             health_budget: Duration::from_millis(health_budget_ms),
@@ -236,6 +239,7 @@ impl<'a> ScienceLaunchSpec<'a> {
         port: u16,
         proxy_url: &'a str,
         reuse_system_ssh: bool,
+        allow_science_host_home: bool,
         system_ssh_hosts: &'a str,
         health_budget_ms: u64,
         poll_interval_ms: u64,
@@ -247,6 +251,7 @@ impl<'a> ScienceLaunchSpec<'a> {
             port,
             proxy_url,
             reuse_system_ssh,
+            allow_science_host_home,
             system_ssh_hosts,
             opaque_bindings: None,
             health_budget: Duration::from_millis(health_budget_ms.max(poll_interval_ms)),
@@ -372,18 +377,14 @@ impl ScienceHostAdapter {
                 acceptance_outer_sandbox,
             },
         );
-        let home_layout = prepare_science_host_home(&sandbox_home()).map_err(|message| {
-            ScienceLaunchFailure::new(
-                ScienceLaunchFailureKind::SpawnFailed,
-                message,
-                ScienceEnvironmentExposure::NotExposed,
-            )
-        })?;
-        super::launch_env::configure_science_host_home(
-            &mut command,
-            &home_layout.config_sha256,
-            &home_layout.security_sha256,
-        );
+        configure_science_home_access(&mut command, &sandbox_home(), spec.allow_science_host_home)
+            .map_err(|message| {
+                ScienceLaunchFailure::new(
+                    ScienceLaunchFailureKind::SpawnFailed,
+                    message,
+                    ScienceEnvironmentExposure::NotExposed,
+                )
+            })?;
         let mut child = command
             .stdout(Stdio::from(stdout))
             .stderr(Stdio::from(stderr))

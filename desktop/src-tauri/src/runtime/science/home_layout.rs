@@ -12,6 +12,25 @@ struct ScienceHostHomeLaunch {
     security_sha256: String,
 }
 
+// Called by the common host adapter for cold start, recovery and auto start.
+// Without an explicit saved opt-in, do not even prepare the host-home config.
+fn configure_science_home_access(
+    command: &mut Command,
+    sandbox: &Path,
+    accepted: bool,
+) -> Result<(), String> {
+    if !accepted {
+        return Ok(());
+    }
+    let home = prepare_science_host_home(sandbox)?;
+    super::launch_env::configure_science_host_home(
+        command,
+        &home.config_sha256,
+        &home.security_sha256,
+    );
+    Ok(())
+}
+
 fn prepare_science_host_home(sandbox: &Path) -> Result<ScienceHostHomeLaunch, String> {
     use super::ssh_bridge::{atomic_write, checked_file_bytes, reject_symlink_components};
     use toml_edit::{value, DocumentMut, Table};
@@ -85,6 +104,32 @@ fn prepare_science_host_home(sandbox: &Path) -> Result<ScienceHostHomeLaunch, St
 #[cfg(test)]
 mod home_layout_tests {
     use super::*;
+
+    #[test]
+    fn home_access_requires_explicit_opt_in_and_revocation_is_non_mutating() {
+        let root = fixture();
+        let config = write_config(root.path(), "[ui]\ntheme = 'dark'\n");
+        let original = fs::read(&config).unwrap();
+        let mut isolated = Command::new("test-science");
+        isolated.env_clear();
+        configure_science_home_access(&mut isolated, root.path(), false).unwrap();
+        assert_eq!(fs::read(&config).unwrap(), original);
+        assert!(!root.path().join(".csswitch-science-tools").exists());
+        assert_eq!(isolated.get_envs().count(), 0);
+
+        let mut opted_in = Command::new("test-science");
+        opted_in.env_clear();
+        configure_science_home_access(&mut opted_in, root.path(), true).unwrap();
+        assert!(opted_in.get_envs().any(|(key, value)| {
+            key == "CSSWITCH_SCIENCE_USE_HOST_HOME" && value == Some(std::ffi::OsStr::new("1"))
+        }));
+        let prepared = fs::read(&config).unwrap();
+        let mut revoked = Command::new("test-science");
+        revoked.env_clear();
+        configure_science_home_access(&mut revoked, root.path(), false).unwrap();
+        assert_eq!(fs::read(&config).unwrap(), prepared);
+        assert_eq!(revoked.get_envs().count(), 0);
+    }
 
     struct Fixture(PathBuf);
     impl Fixture {

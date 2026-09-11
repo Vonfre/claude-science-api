@@ -71,6 +71,7 @@ This release also removes Science translation controls, Codex account sign-in en
 - API keys are stored locally in `~/.csswitch/config.json` with `0600` permissions. **This is not encrypted Keychain storage.** Software running with the same user's permissions may still read the file.
 - Third-party Science uses isolated runtime directories. Reading official account credentials is not part of SciPort's API configuration workflow.
 - The local Gateway uses loopback networking. Ports are configurable; `8765` is reserved for official Science, and the two custom ports must differ.
+- **Real home-directory access is off by default, including upgrades.** To enable native Home browsing, read the disclosure in Settings, check “我同意 Science 使用本机真实主目录” (I agree to Science using my real home directory), and save. Science may inspect or migrate historical data in the real home directory before loading its isolated configuration. Separate data/auth directories do not guarantee that the official executable never touches the real Home. Enabling or revoking access stops the current services and takes effect on restart; revocation does not undo prior official operations.
 - System SSH reuse is off by default. Enabling it authorizes isolated Science to use existing SSH configuration and identities. SciPort does not copy the entire `.ssh` directory or start an SSH server.
 - Deleting connection profiles does not delete Science projects. Clearing saved keys requires entering them again before those connections can be used.
 

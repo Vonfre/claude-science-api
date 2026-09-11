@@ -371,6 +371,8 @@ pub(crate) struct UiSettings {
     pub(super) sandbox_port: u16,
     #[serde(default)]
     pub(super) reuse_system_ssh: bool,
+    #[serde(default)]
+    pub(super) allow_science_host_home: bool,
 }
 
 pub(super) struct SetSettingsPaths {
@@ -378,7 +380,7 @@ pub(super) struct SetSettingsPaths {
     pub(super) sandbox_home: std::path::PathBuf,
 }
 
-/// 运行设置（端口 + 系统 SSH 配置授权；provider/连接改走 profile CRUD + set_active_profile）。
+/// 运行设置（端口 + Home / 系统 SSH 配置授权；provider/连接改走 profile CRUD + set_active_profile）。
 /// 经串行器（修 P1-c）：端口或 SSH 授权一旦变化，正在跑的沙箱都必须拆掉，
 /// 与新端口不一致；此处把这条陈旧链路拆掉（只停我们的沙箱、绝不碰 8765），逼下次「一键开始」按新端口重建，
 /// 杜绝「复用旧沙箱指向死端口、UI 却报沿用不变」。
@@ -452,7 +454,8 @@ where
             cfg.proxy_port,
             old.sandbox_port,
             cfg.sandbox_port,
-        ) || old.reuse_system_ssh != cfg.reuse_system_ssh;
+        ) || old.reuse_system_ssh != cfg.reuse_system_ssh
+            || old.allow_science_host_home != cfg.allow_science_host_home;
 
         // Even false -> false is not automatically a no-op: an earlier
         // interrupted launch may have left one of the three CSSwitch-owned
@@ -496,6 +499,7 @@ where
         after.proxy_port = cfg.proxy_port;
         after.sandbox_port = cfg.sandbox_port;
         after.reuse_system_ssh = cfg.reuse_system_ssh;
+        after.allow_science_host_home = cfg.allow_science_host_home;
         let mut mutation = if destructive {
             let mut effects = Vec::new();
             if teardown {
@@ -879,6 +883,7 @@ where
                     current.proxy_port = next_cfg.proxy_port;
                     current.sandbox_port = next_cfg.sandbox_port;
                     current.reuse_system_ssh = next_cfg.reuse_system_ssh;
+                    current.allow_science_host_home = next_cfg.allow_science_host_home;
                     Ok(((), true))
                 })
                 .map_err(|error| {
@@ -933,10 +938,12 @@ where
                 config::require_no_runtime_transaction(current)?;
                 let changed = current.proxy_port != cfg.proxy_port
                     || current.sandbox_port != cfg.sandbox_port
-                    || current.reuse_system_ssh != cfg.reuse_system_ssh;
+                    || current.reuse_system_ssh != cfg.reuse_system_ssh
+                    || current.allow_science_host_home != cfg.allow_science_host_home;
                 current.proxy_port = cfg.proxy_port;
                 current.sandbox_port = cfg.sandbox_port;
                 current.reuse_system_ssh = cfg.reuse_system_ssh;
+                current.allow_science_host_home = cfg.allow_science_host_home;
                 Ok((changed, changed))
             })
             .map_err(|error| error.to_string())?;

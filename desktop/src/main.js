@@ -35,7 +35,7 @@ let skillPage = null;
 let mode = "proxy"; // "proxy" 第三方 | "official" 官方
 let officialRuntimeState = "gray";
 // 当前配置快照（get_config 结果）。全 key 绝不在此，只有掩码。
-let configState = { profiles: [], templates: [], active_id: "", applied_profile_id: null, selection_pending: false, proxy_port: 18991, sandbox_port: 8990, reuse_system_ssh: false, experimental_codex_enabled: false, codex_network: { mode: "auto", proxy_url: "" }, codex_network_resolved: { source: "direct", proxy_scheme: null } };
+let configState = { profiles: [], templates: [], active_id: "", applied_profile_id: null, selection_pending: false, proxy_port: 18991, sandbox_port: 8990, reuse_system_ssh: false, allow_science_host_home: false, experimental_codex_enabled: false, codex_network: { mode: "auto", proxy_url: "" }, codex_network_resolved: { source: "direct", proxy_scheme: null } };
 let lastBootSequence = -1;
 let pendingConfirm = null;          // 危险操作（清 key / 删除）的「再点一次确认」态
 
@@ -275,7 +275,7 @@ function setBusy(on, op) {
     els.connModel, els.connRoleQuality, els.connRoleFast, els.connRoleFable,
     els.metaSaveBtn, els.metaCancelBtn, $("saveSettingsBtn"),
     // 端口输入也纳入忙碌禁用：忙碌中改端口会与在途操作竞态（修 P1-c 前端侧）。
-    els.proxyPort, els.sandboxPort, els.reuseSystemSsh,
+    els.proxyPort, els.sandboxPort, els.reuseSystemSsh, els.allowScienceHostHome,
   ].forEach((b) => b && (b.disabled = on));
   syncOpenBrowserControl();
   if (skillPage) skillPage.setGlobalBusy(on);
@@ -296,13 +296,14 @@ function syncOpenBrowserControl() {
 function syncActivationControls() {
   const writeLocked = busy;
   [
-    els.newBtn, els.proxyPort, els.sandboxPort, els.reuseSystemSsh,
+    els.newBtn, els.proxyPort, els.sandboxPort, els.reuseSystemSsh, els.allowScienceHostHome,
     els.connClearBtn, els.metaSaveBtn,
   ].forEach((b) => b && (b.disabled = writeLocked));
   if (els.modeSeg) els.modeSeg.querySelectorAll(".seg-btn").forEach((b) => (b.disabled = writeLocked));
   if (els.oneClickBtn) els.oneClickBtn.disabled = busy || activationInFlight;
   if (els.runtimeUseCacheBtn) els.runtimeUseCacheBtn.disabled = busy || activationInFlight;
   if (els.reuseSystemSsh) els.reuseSystemSsh.disabled = busy || activationInFlight;
+  if (els.allowScienceHostHome) els.allowScienceHostHome.disabled = busy || activationInFlight;
   profileController.syncProfileBusyState();
   profileController.refreshWizGate();
   profileController.refreshConnGate();
@@ -407,7 +408,7 @@ function wire() {
     "runtimeChoiceSec", "runtimeChoiceText", "runtimeActivateUpdateBtn", "runtimeKeepActiveBtn", "runtimeUseCacheBtn", "runtimeDownloadBtn", "runtimeChoiceCancelBtn",
     "historyRecoverySec", "historyRecoveryText", "historyRecoveryChoices", "historyRecoveryCancelBtn",
     "msg", "browserFallback", "browserFallbackUrl", "browserFallbackCopyBtn", "browserFallbackRetryBtn", "brandDot", "openBrowserBtn", "doctorBtn", "repairSkillRouteBtn", "updateBtn", "verLabel",
-    "reportBtn", "logsBtn", "quitBtn", "modeSeg", "proxyPort", "sandboxPort", "reuseSystemSsh", "advSec",
+    "reportBtn", "logsBtn", "quitBtn", "modeSeg", "proxyPort", "sandboxPort", "reuseSystemSsh", "allowScienceHostHome", "advSec",
     "connectionOverview", "listSec", "profileList", "newBtn",
     "wizSec", "wizTemplate", "wizTemplateChips", "wizTplLabel", "wizTplHint", "wizName", "wizBaseGroup", "wizBase", "wizBaseHint",
     "wizModelGroup", "wizModelLabel", "wizFetchBtn", "wizModelInfo", "wizModel", "wizModelHint", "wizCodexCatalog", "wizCodexCatalogMeta", "wizCodexCatalogList", "wizStaticCatalog", "wizRoleQuality", "wizRoleFast", "wizRoleFable", "wizCatalogWarning", "wizKeyGroup", "wizKey", "wizSaveBtn", "wizCancelBtn",

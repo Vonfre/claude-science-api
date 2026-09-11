@@ -68,14 +68,9 @@ _DIGEST_KEYS = frozenset({
     "sanitized_environment",
     "tools",
 })
-_CARGO_CONFIG = (
-    b"[source.crates-io]\n"
-    b"replace-with = 'rsproxy-sparse'\n\n"
-    b"[source.rsproxy-sparse]\n"
-    b'registry = "sparse+https://rsproxy.cn/index/"\n\n'
-    b"[net]\n"
-    b"offline = true\n"
-)
+# Use the canonical crates.io cache, never a machine-specific mirror rewrite.
+# Cargo remains offline; lockfiles and dependency content inventories stay bound.
+_CARGO_CONFIG = b"[net]\noffline = true\n"
 _DEPENDENCY_MAX_ENTRIES = 100_000
 _DEPENDENCY_MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 _DEPENDENCY_MAX_FILE_BYTES = 128 * 1024 * 1024
@@ -96,6 +91,31 @@ _REVIEWED_PYTHON_PROCESS_IMAGE_PATH = (
     "Python3.framework/Versions/3.9/Resources/Python.app/Contents/"
     "MacOS/Python"
 )
+# Apple Command Line Tools ships the same launcher/process-image split without
+# the full Xcode application. Accept only reviewed PAIRS, never arbitrary PATH.
+_REVIEWED_CLT_PYTHON_ENTRY_PATH = (
+    "/Library/Developer/CommandLineTools/Library/Frameworks/"
+    "Python3.framework/Versions/3.9/bin/python3.9"
+)
+_REVIEWED_CLT_PYTHON_PROCESS_IMAGE_PATH = (
+    "/Library/Developer/CommandLineTools/Library/Frameworks/"
+    "Python3.framework/Versions/3.9/Resources/Python.app/Contents/MacOS/Python"
+)
+
+
+def _python_identity_is_reviewed(
+    entry: str, image: str,
+    reviewed_entry: str | None, reviewed_image: str | None,
+) -> bool:
+    if reviewed_entry is not None or reviewed_image is not None:
+        return (reviewed_entry is not None and reviewed_image is not None
+                and (entry, image) == (reviewed_entry, reviewed_image))
+    return (entry, image) in {
+        (_REVIEWED_PYTHON_ENTRY_PATH, _REVIEWED_PYTHON_PROCESS_IMAGE_PATH),
+        (_REVIEWED_CLT_PYTHON_ENTRY_PATH, _REVIEWED_CLT_PYTHON_PROCESS_IMAGE_PATH),
+    }
+
+
 _SOURCE_METADATA_PATHS = {
     "catalog": "quality/test-catalog.v1.json",
     "gates": "quality/release-gates.v1.json",
@@ -987,17 +1007,16 @@ def _open_python_composite_authority(
     launcher_path: str = "/usr/bin/python3",
     image_path: str | None = None,
     entry_path: str | None = None,
-    reviewed_entry_path: str = _REVIEWED_PYTHON_ENTRY_PATH,
-    reviewed_image_path: str = _REVIEWED_PYTHON_PROCESS_IMAGE_PATH,
+    reviewed_entry_path: str | None = None,
+    reviewed_image_path: str | None = None,
 ) -> tuple[dict[str, int], dict[str, Any]]:
     """Open independent held launcher and current-process image records."""
     if image_path is None:
         image_path = _current_process_image_path()
     if entry_path is None:
         entry_path = os.path.realpath(sys.executable)
-    if (
-        entry_path != reviewed_entry_path
-        or image_path != reviewed_image_path
+    if not _python_identity_is_reviewed(
+        entry_path, image_path, reviewed_entry_path, reviewed_image_path,
     ):
         raise SourceRuntimeError("process executable unreviewed")
     fds: dict[str, int] = {}
@@ -1026,8 +1045,8 @@ def _recheck_python_composite_authority(
     launcher_path: str = "/usr/bin/python3",
     image_path: str | None = None,
     entry_path: str | None = None,
-    reviewed_entry_path: str = _REVIEWED_PYTHON_ENTRY_PATH,
-    reviewed_image_path: str = _REVIEWED_PYTHON_PROCESS_IMAGE_PATH,
+    reviewed_entry_path: str | None = None,
+    reviewed_image_path: str | None = None,
 ) -> bool:
     if (
         set(fds) != {"launcher", "process_executable"}
@@ -1048,8 +1067,9 @@ def _recheck_python_composite_authority(
         if (
             expected["launcher"].get("path") != launcher_path
             or expected["process_executable"].get("path") != current_path
-            or current_entry != reviewed_entry_path
-            or current_path != reviewed_image_path
+            or not _python_identity_is_reviewed(
+                current_entry, current_path, reviewed_entry_path, reviewed_image_path,
+            )
         ):
             return False
         return (
@@ -1809,26 +1829,37 @@ def _production_dependencies(root_fd: int) -> SourceRuntimeDependencies:
         python_authority: Mapping[str, Any],
     ) -> tuple[dict[str, str], str, dict[str, Any]]:
         account_home = pwd.getpwuid(os.geteuid()).pw_dir
-        rust_bin = os.path.join(
-            account_home,
-            ".rustup/toolchains/stable-aarch64-apple-darwin/bin",
-        )
+        # Keep selection independent of ambient PATH. Each selected binary is
+        # still content-bound and rechecked by the existing tool authority.
         tool_paths = {
             "PYTHON": "/usr/bin/python3",
             "BASH": "/bin/bash",
-            "NODE": "/usr/local/bin/node",
-            "CARGO": os.path.join(rust_bin, "cargo"),
-            "RUSTC": os.path.join(rust_bin, "rustc"),
             "GIT": "/usr/bin/git",
         }
-        records = {
-            name: (
-                dict(python_authority)
-                if name == "PYTHON"
-                else _tool_record(path)
-            )
-            for name, path in tool_paths.items()
-        }
+        records = {"PYTHON": dict(python_authority)}
+        for name in ("BASH", "GIT"):
+            records[name] = _tool_record(tool_paths[name])
+        for node in ("/usr/local/bin/node", "/opt/homebrew/Cellar/node/24.10.0/bin/node"):
+            try:
+                records["NODE"] = _tool_record(node)
+                tool_paths["NODE"] = node
+                break
+            except SourceRuntimeError:
+                continue
+        else:
+            raise SourceRuntimeError("reviewed Node executable unavailable")
+        for toolchain in ("stable-aarch64-apple-darwin", "1.95-aarch64-apple-darwin"):
+            rust_bin = os.path.join(account_home, ".rustup/toolchains", toolchain, "bin")
+            paths = {name: os.path.join(rust_bin, name.lower()) for name in ("CARGO", "RUSTC")}
+            try:
+                pair = {name: _tool_record(path) for name, path in paths.items()}
+            except SourceRuntimeError:
+                continue
+            tool_paths.update(paths)
+            records.update(pair)
+            break
+        else:
+            raise SourceRuntimeError("reviewed Rust toolchain unavailable")
         return tool_paths, _sha_json(records), records
 
     def preflight() -> SourceRuntimeInputs:

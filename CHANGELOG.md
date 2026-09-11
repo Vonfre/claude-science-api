@@ -3,6 +3,8 @@
 
 ## [0.9.0] — 2026-09-11
 
+- 真实主目录访问改为明确选择后启用，默认保持隔离 HOME；冷启动与恢复使用同一授权，撤销会停止现有服务。
+
 ### 研舟 · SciPort / API-only workspace
 
 - 全新雾白与深绿工作台、窄导航、深浅主题，以及集中式启动与分层状态。 / Redesigned workbench, slim navigation, light/dark themes, and distinct runtime status layers.

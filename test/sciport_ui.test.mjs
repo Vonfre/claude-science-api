@@ -98,3 +98,46 @@ test('visual redesign retains local storage identity, reduced motion and narrow 
   assert.equal(config.identifier, 'com.csswitch.menubar');
   assert.match(main, /const THEME_STORAGE_KEY = "csswitch-theme"/);
 });
+
+test('real home access defaults off and is wired through settings, cold start and recovery', () => {
+  assert.match(html, /id="allowScienceHostHome" type="checkbox"/);
+  assert.doesNotMatch(html, /id="allowScienceHostHome"[^>]*checked/);
+  assert.match(html, /检查或迁移真实主目录中的历史 Science 数据/);
+  assert.match(html, /撤销不会回滚/);
+  assert.match(main, /allow_science_host_home: false/);
+  assert.match(profile, /cfg\.allow_science_host_home === true/);
+  assert.match(profile, /allow_science_host_home: allowScienceHostHome/);
+  const lifecycle = read('desktop/src-tauri/src/commands/runtime/lifecycle.rs');
+  assert.match(lifecycle, /old\.allow_science_host_home != cfg\.allow_science_host_home/);
+  for (const source of [read('desktop/src-tauri/src/runtime/sandbox_session/one_click.rs'),
+    read('desktop/src-tauri/src/runtime/sandbox_session/one_click/cold/science_phase.rs')]) {
+    assert.match(source, /ScienceLaunchSpec::(?:one_click|recovery)\([\s\S]*?cfg\.allow_science_host_home,/);
+  }
+  const adapter = read('desktop/src-tauri/src/runtime/science/host_adapter.rs');
+  assert.match(adapter, /configure_science_home_access\([\s\S]*?spec\.allow_science_host_home/);
+  assert.doesNotMatch(adapter, /prepare_science_host_home\(/);
+});
+
+test('saving home consent and revocation binds the submitted value; failure restores saved state', async () => {
+  const body = profile.split('async function persistRuntimeSettings() {')[1].split('\n}\n')[0];
+  for (const [saved, checked, fails] of [[false, true, false], [true, false, false], [false, true, true]]) {
+    const state = { proxy_port: 18991, sandbox_port: 8990, reuse_system_ssh: false, allow_science_host_home: saved };
+    const els = { proxyPort: { value: '18991' }, sandboxPort: { value: '8990' },
+      reuseSystemSsh: { checked: false }, allowScienceHostHome: { checked } };
+    let sent, busy = false;
+    const context = { els, getConfigState: () => state, getSkillPage: () => null,
+      isBusy: () => busy, setBusy: value => { busy = value; }, setMsg: () => {},
+      startPortSaveFeedback: () => {}, mutationErrorText: e => String(e),
+      call: async (name, value) => { sent = [name, value]; if (fails) throw Error('synthetic stop failure'); return {}; },
+      parseConfigMutationResponse: value => value, isExactConfigIntent: () => false,
+      isExactCompletedConfigMutation: () => true,
+      runtime: { hideHistoryRecovery() {}, async refreshStatus() {} } };
+    vm.createContext(context);
+    await vm.runInContext(`async function persistRuntimeSettings() {${body}\n}\npersistRuntimeSettings();`, context);
+    assert.equal(sent[0], 'set_settings');
+    assert.equal(sent[1].cfg.allow_science_host_home, checked);
+    assert.equal(state.allow_science_host_home, fails ? saved : checked);
+    assert.equal(els.allowScienceHostHome.checked, fails ? saved : checked);
+    assert.equal(busy, false);
+  }
+});

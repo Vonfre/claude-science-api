@@ -1,5 +1,32 @@
 # 自动测试与证据判定
 
+## 固定 Python 依赖准备（macOS Apple Silicon）
+
+源码门禁接受 Apple Xcode 或 Command Line Tools 的 Python 3.9；启动器和进程映像
+必须属于同一精确工具链配对，仍校验打开的文件描述符、内容摘要与执行身份，不接受
+任意 PATH 中的 Python。构建工具同样不从 ambient PATH 查找：兼容原有 Node 安装，
+并接受 Homebrew Node 24.10.0 的精确 executable；Rust 接受同目录的 stable 或 1.95
+arm64 Cargo / rustc 配对。实际选中的工具仍逐文件绑定摘要和身份。依赖使用独立、
+版本化缓存，不修改日常 Python 环境。
+
+首次准备（先在临时目录下载锁定 wheel，再用标准库验证并展开）：
+
+```bash
+WHEELS="$(mktemp -d /private/tmp/csw.XXXXXX)"
+/usr/bin/python3 -m pip --isolated download --only-binary=:all: --no-deps \
+  --require-hashes -r quality/source-gate-python.lock --dest "$WHEELS"
+/usr/bin/python3 -I scripts/prepare-source-gate-python.py --wheel-dir "$WHEELS"
+```
+
+缓存位于当前系统账户的 `Library/Caches/SciPort/source-gate/python3.9-wheels-v1/site-packages`。
+安装器验证每个锁定 wheel 的 SHA-256，拒绝路径逃逸、符号链接、重复文件和覆盖已有
+缓存。门禁另行固定原始 wheel RECORD 摘要，并逐文件核对内容、大小、所有者与模块
+来源；没有放宽为“能 import 就通过”。已有缓存无需重复安装；依赖变更必须更新锁、
+RECORD 固定摘要、缓存版本与测试，不能原地替换未复核依赖。Rust 使用已缓存的官方
+crates.io 依赖，保持离线与 lockfile / 依赖内容清单校验，不读取用户 Cargo 配置，
+也不强制特定镜像。此锁的 native wheel
+只适用于 CPython 3.9 / macOS arm64。
+
 ## 权威 source gate
 
 当前唯一完整 source/unit 入口是固定的 `GATE-SOURCE`：

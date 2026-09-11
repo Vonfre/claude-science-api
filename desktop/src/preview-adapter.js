@@ -64,6 +64,7 @@ export const mockStore = {
   proxy_port: 18991,
   sandbox_port: 8990,
   reuse_system_ssh: false,
+  allow_science_host_home: false,
   experimental_codex_enabled: PREVIEW_CODEX,
   codex_network: { mode: "auto", proxy_url: "" },
   codex_network_resolved: { source: "direct", proxy_scheme: null },
@@ -164,6 +165,7 @@ export function mockInvoke(cmd, args) {
         selection_pending: mockStore.selection_pending,
         proxy_port: mockStore.proxy_port, sandbox_port: mockStore.sandbox_port,
         reuse_system_ssh: mockStore.reuse_system_ssh,
+        allow_science_host_home: mockStore.allow_science_host_home,
         experimental_codex_enabled: mockStore.experimental_codex_enabled,
         codex_network: { ...mockStore.codex_network },
         codex_network_resolved: { ...mockStore.codex_network_resolved },
@@ -337,6 +339,7 @@ export function mockInvoke(cmd, args) {
         mockStore.proxy_port = args.cfg.proxy_port;
         mockStore.sandbox_port = args.cfg.sandbox_port;
         mockStore.reuse_system_ssh = !!args.cfg.reuse_system_ssh;
+        mockStore.allow_science_host_home = args.cfg.allow_science_host_home === true;
       }
       return Promise.resolve(mockIntentOutcome("set_settings", "committed"));
     case "set_mode":

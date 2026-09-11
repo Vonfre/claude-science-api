@@ -54,11 +54,12 @@ VARIANT_HASHES = {
     "input-drift": "2f3c43f3fad27a889b2f1e18591932f36fe8a202d63ed24c54814b9f5f213e18",
 }
 CLI_VARIANT_HASHES = {
-    "output-root-rebind-after-seal": "de1d4a6a6b17c9111354d417da5f5e99d38102e39a8fa9a211a7571a24680a32",
-    "post-seal-public-fd-close-oserror": "dbbb948ba4b96cc0cd19f491848c8a436fa268f968c45fee6dc966d55801ea11",
-    "post-seal-root-close-oserror": "fa36a344c4e6b24e7c409c2cdd58ff1bbcf0d9c4a163bc93c6043b8e97b18794",
-    "sys-executable-drift": "9a997a026fea5d4ad98cb077ba409c98c05285cf14c9b385783a03fb0b058ed1",
+    "output-root-rebind-after-seal": "8a6ee8c326268ba679f070189898cc96ba6744228dbc43684f031317f635276d",
+    "post-seal-public-fd-close-oserror": "2e81eac9122ae575b350b41b1e1e4702f192c36799f69da0f307b4e86a000592",
+    "post-seal-root-close-oserror": "253b7bfe1953ff01e23538e3a66816f83fee3e2b1a6a8bf86ebcc5ceacade51a",
+    "sys-executable-drift": "885b9bbc80ac05ed97eaccad9ad7467ad705f5c45a02ea14d2ec0722ea0b5510"
 }
+
 SCENARIOS = {
     "normal": b'"normal"',
     "fake-marker": b'"fake-marker"',

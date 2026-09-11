@@ -1110,6 +1110,7 @@ fn restart_science_identity_with_budget<R: Runtime>(
             port,
             &proxy_url,
             cfg.reuse_system_ssh,
+            cfg.allow_science_host_home,
             &ssh_hosts,
             health_budget_ms,
             POLL_INTERVAL_MS,
