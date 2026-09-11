@@ -11,3 +11,5 @@
 - 已健康 daemon 不因版本探测或可选功能漂移而强制重启。
 - 外部 Skill route / connector 配置失败只降级该可选功能，不阻断普通 Science 启动。
 - 系统 SSH 默认关闭；一旦用户启用，真实 config 与 packaged wrapper 的安全校验属于 fail-closed 启动条件，不能当作 warning 略过。
+
+- 用户已明确接受官方 Home 行为时，daemon 可使用真实 host HOME，但必须先安全固定隔离 config/auth/data 路径并核验启动配置；模型的目录读写仍由 Science 授权。官方启动自身的历史目录检查/迁移按该授权执行，Agent 的诊断、控制探针和自动测试仍遵守隔离 HOME 与禁止读取真实凭证的规则。具体 owner 合同见 `docs/architecture/science-runtime.md`。

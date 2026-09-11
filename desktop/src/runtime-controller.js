@@ -224,17 +224,7 @@ async function checkOneClickBoundary() {
     setMsg("当前选择仍在保存。请等待完成后再一键开始。", "err");
     return false;
   }
-  if (!getConfigState().active_id) {
-    setMsg("还没有「当前选择」的配置。请先点「新建配置」或在列表点「设为当前」选一条，再一键开始。", "err");
-    return false;
-  }
-  const active = (getConfigState().profiles || []).find((p) => p.id === getConfigState().active_id);
-  if (isCodexSource(active)) {
-    if (!getConfigState().experimental_codex_enabled) {
-      setMsg("当前是 Codex 配置，但实验入口已关闭。请先在“设置 > Codex 账号与连接”重新启用。", "err");
-      return false;
-    }
-  }
+  // API admission is backend-owned, after any interrupted local recovery.
   return true;
 }
 

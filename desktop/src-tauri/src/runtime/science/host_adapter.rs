@@ -372,6 +372,18 @@ impl ScienceHostAdapter {
                 acceptance_outer_sandbox,
             },
         );
+        let home_layout = prepare_science_host_home(&sandbox_home()).map_err(|message| {
+            ScienceLaunchFailure::new(
+                ScienceLaunchFailureKind::SpawnFailed,
+                message,
+                ScienceEnvironmentExposure::NotExposed,
+            )
+        })?;
+        super::launch_env::configure_science_host_home(
+            &mut command,
+            &home_layout.config_sha256,
+            &home_layout.security_sha256,
+        );
         let mut child = command
             .stdout(Stdio::from(stdout))
             .stderr(Stdio::from(stderr))

@@ -106,6 +106,9 @@ mod format_control_runner;
 #[path = "science/executable.rs"]
 mod format_executable;
 #[cfg(any())]
+#[path = "science/home_layout.rs"]
+mod format_home_layout;
+#[cfg(any())]
 #[path = "science/host_adapter.rs"]
 mod format_host_adapter;
 #[cfg(any())]
@@ -130,6 +133,7 @@ include!("science/runtime_state.rs");
 include!("science/managed_launch.rs");
 include!("science/lifecycle.rs");
 include!("science/host_adapter.rs");
+include!("science/home_layout.rs");
 
 #[cfg(test)]
 pub(crate) fn test_runtime_identity(path: PathBuf) -> ScienceRuntimeIdentity {

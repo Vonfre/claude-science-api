@@ -111,7 +111,7 @@ test("失效中的旧请求不能覆盖后续组织快照", async () => {
   assert.equal(page.loading, false);
 });
 
-test("生产页面没有假 MCP 操作、原型文案或 CS 字块", async () => {
+test("API 专用页面不挂载 Skill 或 MCP 入口", async () => {
   const [html, main, page] = await Promise.all([
     readFile(new URL("../desktop/src/index.html", import.meta.url), "utf8"),
     readFile(new URL("../desktop/src/main.js", import.meta.url), "utf8"),
@@ -120,7 +120,9 @@ test("生产页面没有假 MCP 操作、原型文案或 CS 字块", async () =>
   const combined = html + main + page;
   assert.doesNotMatch(combined, /交互原型|仅本地导入连接后端|Claude Science 控制台/);
   assert.doesNotMatch(html, />CS<|brand-edition/);
-  assert.match(html, /data:image\/png;base64/);
+  assert.match(html, /不在研舟中登录官方账号/);
+  assert.doesNotMatch(html, /data-page="skills"|id="skillPage"/);
+  assert.doesNotMatch(main, /import.*createSkillPage/);
   assert.match(page, /MCP 暂未开放/);
   assert.match(page, /disabled>MCP 暂未开放<\/button>/);
   assert.doesNotMatch(page, /新建外部 MCP|mcp-attach|mcp-detach|fixture|模拟 load/);

@@ -239,7 +239,11 @@ pub(crate) fn system_ssh_bridge_fingerprint(enabled: bool) -> Result<String, Str
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-fn checked_file_bytes(path: &Path, limit: u64, label: &str) -> Result<Option<Vec<u8>>, String> {
+pub(super) fn checked_file_bytes(
+    path: &Path,
+    limit: u64,
+    label: &str,
+) -> Result<Option<Vec<u8>>, String> {
     let mut options = OpenOptions::new();
     options
         .read(true)
@@ -270,7 +274,7 @@ fn checked_file_bytes(path: &Path, limit: u64, label: &str) -> Result<Option<Vec
     Ok(Some(bytes))
 }
 
-fn reject_symlink_components(path: &Path) -> Result<(), String> {
+pub(super) fn reject_symlink_components(path: &Path) -> Result<(), String> {
     if !path.is_absolute() {
         return Err("隔离 Science 状态路径不是绝对路径".into());
     }
@@ -334,7 +338,7 @@ fn set_ssh_hosts(document: &mut DocumentMut, hosts: Option<&[String]>) {
     }
 }
 
-fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(super) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     reject_symlink_components(path)?;
     let parent = path.parent().ok_or("隔离状态路径没有父目录")?;
     fs::create_dir_all(parent).map_err(|_| "无法创建隔离 Science 状态目录".to_string())?;

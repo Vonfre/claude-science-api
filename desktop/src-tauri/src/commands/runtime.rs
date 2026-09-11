@@ -66,6 +66,9 @@ pub(crate) async fn set_mode(
     lifecycle: State<'_, SharedLifecycle>,
     mode: String,
 ) -> Result<Value, String> {
+    if mode != "proxy" {
+        return Err("此版本仅支持第三方 API 模式。".into());
+    }
     lifecycle::set_mode_command(app, state, lifecycle, mode).await
 }
 
@@ -130,6 +133,9 @@ pub(crate) async fn restore_history_choice<R: tauri::Runtime>(
     reference: String,
     resume: Option<bool>,
 ) -> Result<serde_json::Value, crate::commands::codex::RuntimeCommandError> {
+    if resume.unwrap_or(false) {
+        crate::api_only::require_api_profile(&config::default_dir(), None)?;
+    }
     one_click::restore_history_choice_command(app, state, lifecycle, reference, resume).await
 }
 
@@ -170,10 +176,11 @@ pub(crate) fn boot_snapshot(state: State<'_, SharedAppState>) -> serde_json::Val
 
 #[tauri::command]
 pub(crate) async fn open_url(
+    app: tauri::AppHandle,
     state: State<'_, SharedAppState>,
     lifecycle: State<'_, SharedLifecycle>,
 ) -> Result<serde_json::Value, String> {
-    actions::open_url_command(state, lifecycle).await
+    actions::open_url_command(app, state, lifecycle).await
 }
 
 #[tauri::command]

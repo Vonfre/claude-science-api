@@ -11,6 +11,7 @@
 //! 铁律相关：API key 只在内存与 0600 的 config.json，OAuth token 只在 CSSwitch 私有认证文件；回显前端只给掩码/脱敏状态；沙箱端口/目录护栏
 //! 由被调脚本负责（对 8765 与真实目录失败关闭）；关窗只隐藏，显式退出停代理与沙箱。
 
+mod api_only;
 mod codex_auth_supervisor;
 mod commands;
 mod config;
@@ -46,7 +47,7 @@ fn decide_launch_with_auto_boot(cfg: &config::Config, auto_boot: bool) -> Launch
         return LaunchPath::ShowPanel;
     }
     if cfg.mode == "official" {
-        return LaunchPath::OpenOfficial;
+        return LaunchPath::ShowPanel;
     }
     match cfg.active_profile() {
         Some(p)
@@ -491,7 +492,7 @@ fn install_menu(app: &tauri::App) -> tauri::Result<()> {
     let preferences = MenuItemBuilder::with_id("preferences", "偏好设置...")
         .accelerator("CmdOrCtrl+,")
         .build(app)?;
-    let app_menu = SubmenuBuilder::new(app, "CSSwitch")
+    let app_menu = SubmenuBuilder::new(app, "SciPort")
         .item(&preferences)
         .separator()
         .quit()
@@ -1014,6 +1015,21 @@ fn start_science_runtime_update_scheduler(app: tauri::AppHandle) {
 }
 
 // ---------- 入口 ----------
+pub(crate) fn allows_app_commands(label: &str) -> bool {
+    label == "main"
+}
+pub(crate) fn main_window_commands<R: tauri::Runtime>(
+    handler: impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static,
+) -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
+    move |invoke| {
+        if !allows_app_commands(invoke.message.webview_ref().label()) {
+            invoke.resolver.reject("此窗口无权调用切换器命令");
+            return true;
+        }
+        handler(invoke)
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -1025,22 +1041,11 @@ pub fn run() {
         .manage(Arc::new(Mutex::new(AppState::default())))
         .manage(Arc::new(lifecycle::Lifecycle::new()))
         .manage(Arc::new(CodexAuthSupervisor::default()))
-        .invoke_handler(tauri::generate_handler![
-            commands::codex::set_experimental_codex_enabled,
-            commands::codex::set_codex_network,
-            commands::codex::codex_auth_status,
-            commands::codex::codex_auth_start,
-            commands::codex::codex_auth_cancel,
-            commands::codex::codex_auth_operation_status,
-            commands::codex::codex_ensure_profile,
-            commands::codex::codex_auth_logout,
-            commands::codex::codex_downgrade_preview,
-            commands::codex::codex_downgrade_export_all,
+        .invoke_handler(main_window_commands(tauri::generate_handler![
             commands::profiles::get_config,
             commands::profiles::acknowledge_pending_notice,
             commands::runtime::set_settings,
             commands::runtime::set_mode,
-            commands::runtime::open_official,
             commands::profiles::create_profile,
             commands::profiles::update_profile_metadata,
             commands::profiles::update_profile_connection,
@@ -1059,16 +1064,11 @@ pub fn run() {
             commands::runtime::status,
             commands::runtime::boot_snapshot,
             commands::runtime::open_url,
-            commands::skill_install::install_local_skill_package,
-            commands::skill_listing::list_installed_skills,
             commands::diagnostics::run_doctor_read_only,
-            commands::diagnostics::repair_skill_route,
             commands::diagnostics::app_version,
-            commands::diagnostics::open_release_page,
-            commands::diagnostics::report_bug,
             commands::diagnostics::open_logs,
             commands::runtime::quit_app
-        ])
+        ]))
         .setup(|app| {
             install_menu(app)?;
 
@@ -1826,7 +1826,7 @@ mod tests {
         };
         assert_eq!(
             decide_launch_with_auto_boot(&official, true),
-            LaunchPath::OpenOfficial
+            LaunchPath::ShowPanel
         );
 
         let no_active = Config {
@@ -2008,5 +2008,46 @@ mod tests {
             vec![None, None, None],
             "Idle, Failed, and Attention callbacks must pass no runtime choice"
         );
+    }
+}
+
+#[cfg(test)]
+mod ipc_scope_tests {
+    use super::main_window_commands;
+    #[test]
+    fn non_main_ipc_is_rejected_even_with_a_forged_local_request_url() {
+        use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets};
+        #[tauri::command]
+        fn scope_test_command() -> &'static str {
+            "allowed"
+        }
+        let app = mock_builder()
+            .invoke_handler(main_window_commands(tauri::generate_handler![
+                scope_test_command
+            ]))
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        for label in ["main", "untrusted-window"] {
+            let window = tauri::WebviewWindowBuilder::new(&app, label, Default::default())
+                .build()
+                .unwrap();
+            let result = get_ipc_response(
+                &window,
+                tauri::webview::InvokeRequest {
+                    cmd: "scope_test_command".into(),
+                    callback: tauri::ipc::CallbackFn(0),
+                    error: tauri::ipc::CallbackFn(1),
+                    url: "tauri://localhost".parse().unwrap(),
+                    body: Default::default(),
+                    headers: Default::default(),
+                    invoke_key: tauri::test::INVOKE_KEY.into(),
+                },
+            );
+            if label == "main" {
+                assert_eq!(result.unwrap().deserialize::<String>().unwrap(), "allowed");
+            } else {
+                assert!(result.unwrap_err().as_str().unwrap().contains("无权"));
+            }
+        }
     }
 }

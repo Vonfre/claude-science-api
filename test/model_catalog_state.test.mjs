@@ -345,14 +345,14 @@ test("provider forms expose four free model inputs plus read-only scratch discov
   assert.match(html, /尚未探测模型/);
 });
 
-test("Codex profile action aligns with providers as a permanently disabled edit button", () => {
+test("API-only list exposes editable API rows and filters account profiles", () => {
   const js = readFileSync(new URL("../desktop/src/profile-controller.js", import.meta.url), "utf8");
   const bootstrap = readFileSync(new URL("../desktop/src/main.js", import.meta.url), "utf8");
   const renderList = js.slice(js.indexOf("function renderList()"), js.indexOf("// ── 模式（第三方 / 官方）──"));
   const busyState = js.slice(js.indexOf("function syncProfileBusyState()"), js.indexOf("function tplById("));
   assert.doesNotMatch(renderList, /查看模型/);
-  assert.match(renderList, /data-permanently-disabled="true" disabled aria-disabled="true"[^>]*>编辑<\/button>/);
-  assert.match(renderList, /'<button class="abtn" data-act="editconn">编辑<\/button>'/);
+  assert.match(js, /profiles = \(cfg\.profiles \|\| \[\]\)\.filter\(\(p\) => !isCodexSource\(p\)\)/);
+  assert.match(renderList, /class="icon-btn" data-act="editconn" aria-label=/);
   assert.match(busyState, /permanentlyDisabled \|\| isBusy\(\)/);
   assert.match(bootstrap, /btn\.disabled \|\| btn\.dataset\.permanentlyDisabled === "true"/);
 });

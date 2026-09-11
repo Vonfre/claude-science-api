@@ -52,6 +52,24 @@ fn humanize_model_id(id: &str) -> Option<String> {
 }
 
 pub(crate) fn science_safe_display_name(id: &str, candidate: &str) -> String {
+    // Science filters lowercase hyphenated display names, not just non-Claude IDs.
+    // Normalize the label only; selectors and upstream request IDs must stay exact.
+    let hidden_slug = candidate
+        .as_bytes()
+        .first()
+        .is_some_and(u8::is_ascii_lowercase)
+        && candidate.contains('-')
+        && candidate.split('-').all(|part| {
+            !part.is_empty()
+                && part
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        });
+    if hidden_slug {
+        if let Some(generated) = humanize_model_id(candidate) {
+            return generated;
+        }
+    }
     let claude_like = id
         .rsplit('/')
         .next()
@@ -274,15 +292,35 @@ mod tests {
         ]}));
         let data = response["data"].as_array().unwrap();
         assert_eq!(data[0]["id"], "kimi-k3");
-        assert_eq!(data[0]["display_name"], "kimi-k3");
+        assert_eq!(data[0]["display_name"], "Kimi K3");
         assert_eq!(data[1]["id"], "qwen-plus-latest");
-        assert_eq!(data[1]["display_name"], "qwen-plus-latest");
+        assert_eq!(data[1]["display_name"], "Qwen Plus Latest");
         assert_eq!(data[2]["id"], "claude-sonnet-5");
         assert_eq!(data[2]["display_name"], "Claude Sonnet 5");
         assert_eq!(data[3]["id"], "vendor/model-v2");
-        assert_eq!(data[3]["display_name"], "compact-label");
+        assert_eq!(data[3]["display_name"], "Compact Label");
         assert_eq!(data[4]["id"], "vendor-model");
         assert_eq!(data[4]["display_name"], "Vendor Model Pro");
+    }
+
+    #[test]
+    fn science_display_names_humanize_filtered_slugs_but_preserve_other_labels() {
+        for (id, candidate, expected) in [
+            ("gpt-6-astra", "gpt-6-astra", "GPT 6 Astra"),
+            ("gpt-5.6-luna", "gpt-5.6-luna", "gpt-5.6-luna"),
+            ("gpt-5.6-sol", "gpt-5.6-sol", "gpt-5.6-sol"),
+            ("gpt-6-astra", "research-model", "Research Model"),
+            ("gpt-6-astra", "My Astra", "My Astra"),
+            ("gpt-6-astra", "我的模型", "我的模型"),
+            ("model", "a-1", "A 1"),
+            ("model", "123-model", "123-model"),
+            ("model", "model--name", "model--name"),
+            ("model", "model-", "model-"),
+            ("model", "model_name", "model_name"),
+            ("model", "plain", "plain"),
+        ] {
+            assert_eq!(super::science_safe_display_name(id, candidate), expected);
+        }
     }
 
     #[test]

@@ -37,7 +37,15 @@ pub(super) fn manual_open_result(url: String, result: Result<(), String>) -> ser
     }
 }
 
+#[cfg(test)]
 pub(super) fn open_url_inner(state: &SharedAppState) -> Result<serde_json::Value, String> {
+    open_url_with(state, |url| open_in_browser(url).map(|_| "browser"))
+}
+
+fn open_url_with(
+    state: &SharedAppState,
+    open: impl FnOnce(&str) -> Result<&'static str, String>,
+) -> Result<serde_json::Value, String> {
     let (sandbox_port, runtime) = {
         let st = lock(state);
         let runtime = st
@@ -53,14 +61,23 @@ pub(super) fn open_url_inner(state: &SharedAppState) -> Result<serde_json::Value
     // 不复用 one-click 已消费的内存 URL。成功时不返回 URL；只有系统
     // opener 失败时才把同一次新 URL 交给 UI，供用户复制或再次打开。
     let url = ScienceHostAdapter::url(sandbox_port, &runtime);
-    Ok(manual_open_result(url.clone(), open_in_browser(&url)))
+    match open(&url) {
+        Ok(_) => Ok(manual_open_result(url, Ok(()))),
+        Err(error) => Ok(json!({"status":"error", "message":error, "fallback_url":url})),
+    }
 }
 
 pub(super) async fn open_url_command(
+    _app: tauri::AppHandle,
     state: State<'_, SharedAppState>,
     lifecycle: State<'_, SharedLifecycle>,
 ) -> Result<serde_json::Value, String> {
     let state = state.inner().clone();
     let lifecycle = lifecycle.inner().clone();
-    run_blocking(move || lifecycle.with_observed_context(|| open_url_inner(&state))).await
+    run_blocking(move || {
+        lifecycle.with_observed_context(|| {
+            open_url_with(&state, |url| open_in_browser(url).map(|_| "browser"))
+        })
+    })
+    .await
 }

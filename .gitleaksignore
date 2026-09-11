@@ -1,0 +1,12 @@
+# Reviewed historical false positives: deterministic test inputs and mock auth epochs.
+# Exact fingerprints only; no production-path or generic-rule suppression.
+522a9ad1c03d1187b7d6ad35aab6f044e68b074c:desktop/src-tauri/src/commands/runtime/tests.rs:generic-api-key:5796
+b8c1fb173490053c2f24560c5aa812032b55441f:desktop/src-tauri/src/runtime/proxy_lifecycle/tests.rs:generic-api-key:502
+ef51c358c2c80a6015c864ebb6642fcb1ee9757b:desktop/src/preview-adapter.js:generic-api-key:384
+0db04c4060b891fc3bb1e097058fa69fa2bdbea3:desktop/src/main.js:generic-api-key:1050
+8d9ce79ab8254202cf7b1b8e1da14a7e8895a313:desktop/src/main.js:generic-api-key:159
+75e443821aeca352c29b65e94353fa194b39b6f2:desktop/src/main.js:generic-api-key:973
+356c26a234cf9392a5ce81a10c0141b94df272df:desktop/src-tauri/src/runtime/skill_install_bridge_e2e.rs:generic-api-key:1297
+7613274ee56cb05016ba57f25396ff6d43c19f25:desktop/src-tauri/src/runtime/proxy_lifecycle.rs:generic-api-key:714
+7613274ee56cb05016ba57f25396ff6d43c19f25:test/test_external_skill_install_bridge.py:generic-api-key:21
+4213327150736e2311d68ff75eb43afcf809e967:test/installed_provider_matrix.py:generic-api-key:69

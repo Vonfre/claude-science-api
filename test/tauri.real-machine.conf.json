@@ -6,10 +6,10 @@
       {
         "label": "main",
         "title": "CSSwitch Test",
-        "width": 920,
-        "height": 650.5,
-        "minWidth": 760,
-        "minHeight": 520,
+        "width": 1180,
+        "height": 800,
+        "minWidth": 820,
+        "minHeight": 600,
         "resizable": true,
         "decorations": true,
         "transparent": false,
@@ -20,6 +20,8 @@
     ]
   },
   "bundle": {
-    "targets": ["app"]
+    "targets": [
+      "app"
+    ]
   }
 }

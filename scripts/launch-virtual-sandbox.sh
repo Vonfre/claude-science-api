@@ -1,7 +1,8 @@
 #!/bin/zsh
 # 启动 CSSwitch 管理的隔离运行环境。
 # Safety boundaries:
-#   - 独立 HOME + 独立 data-dir + 独立端口，绝不修改/删除真实 ~/.claude-science，绝不用端口 8765
+#   - Desktop 使用真实 HOME 浏览文件；独立 config/auth/data-dir 与端口，绝不用端口 8765
+#   - Science 自身按用户授权执行官方 HOME 检查/迁移；CSSwitch 不读取真实账号
 #   - data-dir 只承载持久化状态；不从真实 Science HOME 读取或复制 runtime 或用户数据
 #   - 系统 SSH 配置仅在用户显式授权时读取具体 Host alias；不复制 Host block、密钥或整个 ~/.ssh
 #   - 只使用应用在隔离目录中生成的本地状态，与真实账号无关
@@ -16,7 +17,7 @@ umask 077
 
 PROJ="${0:A:h:h}"
 SANDBOX_HOME="${SANDBOX_HOME:-$PROJ/.sandbox/home}"
-DATA_DIR="$SANDBOX_HOME/.claude-science"   # = auth_dir（Science 按 HOME 推导）
+DATA_DIR="$SANDBOX_HOME/.claude-science"   # 显式固定 data-dir 与 auth_dir
 # Host home is explicit (CSSWITCH_HOST_HOME from Desktop allowlist). Do not treat
 # ambient $HOME as the trusted host path when Desktop injects the control env.
 if [[ -n "${CSSWITCH_HOST_HOME:-}" ]]; then
@@ -359,7 +360,7 @@ fi
 
 echo
 echo "启动隔离沙箱 Science（虚拟登录）"
-echo "  HOME     = [CSSwitch isolated]"
+echo "  HOME     = [host browsing when prepared; state remains isolated]"
 echo "  data-dir = [CSSwitch isolated Science data]"
 echo "  端口     = $PORT   （真实实例 8765 不受影响）"
 echo "  预览端口 = $PREVIEW_PORT   （显式固定，供本机 Science 预览使用）"
@@ -385,23 +386,57 @@ if path_contains_symlink "$DATA_DIR"; then
   exit 1
 fi
 validate_science_opaque_bindings
+# Only the desktop adapter can opt into host HOME after preparing an isolated
+# config and a private security shim. Missing/drifting inputs fail closed.
+_SCIENCE_HOME="$SANDBOX_HOME"
+typeset -a _SCIENCE_CONFIG_ARGS
+_SCIENCE_CONFIG_ARGS=()
+_HOST_TOOLS=""
+if [[ "${CSSWITCH_SCIENCE_USE_HOST_HOME:-0}" == "1" ]]; then
+  _config="$DATA_DIR/config.toml"
+  _security="$SANDBOX_HOME/.csswitch-science-tools/security"
+  for _verified in "$_config" "$_security"; do
+    if path_contains_symlink "$_verified" || [[ ! -f "$_verified" ]] \
+        || [[ "$(/usr/bin/stat -f '%u' "$_verified")" != "$(/usr/bin/id -u)" ]]; then
+      echo "拒绝：本机 Home 模式的隔离配置或私有工具不安全" >&2
+      exit 1
+    fi
+  done
+  if [[ "$(/usr/bin/stat -f '%Lp' "$_config")" != "600" \
+      || "$(/usr/bin/stat -f '%Lp' "$_security")" != "500" \
+      || "$(/usr/bin/shasum -a 256 "$_config" | /usr/bin/awk '{print $1}')" != "${CSSWITCH_SCIENCE_CONFIG_SHA256:-}" \
+      || "$(/usr/bin/shasum -a 256 "$_security" | /usr/bin/awk '{print $1}')" != "${CSSWITCH_SCIENCE_SECURITY_SHA256:-}" ]]; then
+    echo "拒绝：本机 Home 模式的隔离配置或私有工具身份不一致" >&2
+    exit 1
+  fi
+  if [[ "$REAL_HOME" != /* || ! -d "$REAL_HOME" ]]; then
+    echo "拒绝：本机 Home 不存在或不是绝对目录" >&2
+    exit 1
+  fi
+  _SCIENCE_HOME="$REAL_HOME"
+  _SCIENCE_CONFIG_ARGS=(--config "$_config")
+  _HOST_TOOLS="$SANDBOX_HOME/.csswitch-science-tools:"
+elif [[ "${CSSWITCH_SCIENCE_USE_HOST_HOME:-0}" != "0" ]]; then
+  echo "拒绝：本机 Home 模式标志非法" >&2
+  exit 1
+fi
 # Empty environment + explicit allowlist only. Never inherit ambient parent vars.
 _SAFE_PATH="/usr/bin:/bin:/usr/sbin:/sbin"
-_SCIENCE_PATH="$_SAFE_PATH"
+_SCIENCE_PATH="$_HOST_TOOLS$_SAFE_PATH"
 if [[ "$REUSE_SYSTEM_SSH" == "1" ]]; then
   if ! validate_ssh_wrapper_identity "$SSH_BRIDGE_BIN" \
       || ! materialize_system_ssh_wrapper_snapshot; then
     echo "拒绝：CSSwitch SSH bridge 无法固定为隔离的内容身份 snapshot" >&2
     exit 1
   fi
-  _SCIENCE_PATH="$SSH_RUNTIME_BRIDGE_DIR:$_SAFE_PATH"
+  _SCIENCE_PATH="$_HOST_TOOLS$SSH_RUNTIME_BRIDGE_DIR:$_SAFE_PATH"
 fi
 _SCIENCE_TMPDIR="${TMPDIR:-/private/tmp}"
 _SCIENCE_LANG="${LANG:-en_US.UTF-8}"
 _SCIENCE_USER="$(/usr/bin/id -un 2>/dev/null || echo csswitch)"
 typeset -a _SCIENCE_ENV
 _SCIENCE_ENV=(
-  "HOME=$SANDBOX_HOME"
+  "HOME=$_SCIENCE_HOME"
   "PATH=$_SCIENCE_PATH"
   "TMPDIR=$_SCIENCE_TMPDIR"
   "LANG=$_SCIENCE_LANG"
@@ -445,7 +480,7 @@ if [[ "$REUSE_SYSTEM_SSH" == "1" ]]; then
   )
 fi
 if ! /usr/bin/env -i "${_SCIENCE_ENV[@]}" "$BIN" serve \
-    --data-dir "$DATA_DIR" \
+    --data-dir "$DATA_DIR" "${_SCIENCE_CONFIG_ARGS[@]}" \
     --host 127.0.0.1 \
     --port "$PORT" \
     --sandbox-port "$PREVIEW_PORT" \

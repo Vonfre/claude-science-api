@@ -1364,9 +1364,18 @@ fn isolated_ssh_prevalidation_precedes_oauth_mutation() {
         );
 
         let result = super::one_click_login_cmd(handle, state.clone(), lifecycle.clone(), None);
-        let exact_error = result
-            .as_ref()
-            .is_err_and(|error| error.to_string().contains(expected_error));
+        let exact_error = match &result {
+            Err(error) => error.to_string().contains(expected_error),
+            Ok(outcome) => {
+                outcome["action"] == "failed"
+                    && outcome["stage"] == "prepare"
+                    && outcome["recovery_status"] == "not_needed"
+                    && outcome["environment_status"] == "not_exposed"
+                    && outcome["message"]
+                        .as_str()
+                        .is_some_and(|message| message.contains(expected_error))
+            }
+        };
         let authorities_unchanged = config::load_from(&config_dir).unwrap() == config_before
             && app_authority_projection(&state) == app_before
             && authority_tree(&home.join(".ssh")) == system_ssh_before
@@ -3955,6 +3964,17 @@ fn f1_a_history_restore_and_resume_is_one_backend_operation() {
 }
 
 #[test]
+fn api_only_legacy_history_recovery_precedes_account_rejection() {
+    run_exact_ignored_runtime_characterization(
+        "commands::runtime::tests::isolated_r0_history_restore_command_contract",
+        &[(
+            "CSSWITCH_TEST_R0_HISTORY_RESTORE_ORACLE",
+            "credential-crash-replay",
+        )],
+    );
+}
+
+#[test]
 fn f1_a_history_crash_and_concurrent_config_recovery_is_owned() {
     for oracle in [
         "post-snapshot-config-drift",
@@ -4707,7 +4727,7 @@ fn isolated_r0_history_restore_command_contract() {
                 }) && journal_while_blocked
                     && selected_org_while_blocked.as_deref() == Some(history_orgs[0])
                     && replay_result.as_ref().is_some_and(|replay| {
-                        matches!(replay, Err(crate::commands::codex::RuntimeCommandError::Auth(_)))
+                        matches!(replay, Err(crate::commands::codex::RuntimeCommandError::Message(message)) if message.contains("仅支持第三方 API"))
                     })
                     && !journal_present_after
                     && selected_org_after.is_none()
@@ -4784,7 +4804,7 @@ fn isolated_r0_history_restore_command_contract() {
                     error.contains("interrupted history credential publication")
                 })
                     && replay_result.as_ref().is_some_and(|replay| {
-                        matches!(replay, Err(crate::commands::codex::RuntimeCommandError::Auth(_)))
+                        matches!(replay, Err(crate::commands::codex::RuntimeCommandError::Message(message)) if message.contains("仅支持第三方 API"))
                     })
                     && !journal_present_after
                     && selected_org_after.is_none()
@@ -6412,6 +6432,129 @@ fn isolated_ssh_feature_off_ignores_missing_optional_wrapper_and_system_config()
                 cleanup_observation.lines().count() >= 2,
                 "one-shot commit cleanup fault must be retried before ordinary success: {cleanup_observation:?}"
             );
+    }
+}
+
+#[test]
+#[ignore = "isolated V1 upgrade: temp HOME, fake Science/security and loopback only"]
+fn isolated_ssh_legacy_v1_upgrade_and_rollback() {
+    let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    for fail_commit in [false, true] {
+        let tmp = tmpdir("ssh-v1-upgrade");
+        let home = tmp.join("home");
+        let bins = tmp.join("bin");
+        fs::create_dir_all(home.join(".ssh")).unwrap();
+        let system_config = home.join(".ssh/config");
+        fs::write(&system_config, b"Host isolated-test-host\n").unwrap();
+        fs::set_permissions(&system_config, fs::Permissions::from_mode(0o600)).unwrap();
+        let system_before = authority_tree(&home.join(".ssh"));
+        let fake_science = write_test_bins(&bins).canonicalize().unwrap();
+        let upstream = start_mock_upstream();
+        let mut ports = reserve_ssh_fixture_ports();
+        let mut env_guard = EnvGuard::new();
+        env_guard.set("HOME", &home);
+        env_guard.set("CSSWITCH_REPO", &repository);
+        env_guard.set("SCIENCE_BIN", &fake_science);
+        env_guard.set("CSSWITCH_TEST_OPEN_BIN", bins.join("open"));
+        env_guard.set("CSSWITCH_TEST_FAKE_SCIENCE_IDENTITY", "1");
+        env_guard.set("CSSWITCH_DOCTOR_CHECK_REAL_HOME", "0");
+        env_guard.set(
+            "PATH",
+            format!("{}:/usr/bin:/bin:/usr/sbin:/sbin", bins.display()),
+        );
+        let dir = config::default_dir();
+        let cfg = ssh_fixture_config(upstream.port, ports.proxy_port, ports.sandbox_port);
+        config::save_to(&dir, &cfg).unwrap();
+        let sandbox_home = dir.join("sandbox/home");
+        let ssh_dir = sandbox_home.join(".ssh");
+        fs::create_dir_all(&ssh_dir).unwrap();
+        fs::set_permissions(&ssh_dir, fs::Permissions::from_mode(0o700)).unwrap();
+        let legacy = format!(
+            "# CSSwitch managed system SSH config bridge v1\nInclude \"{}\"\n",
+            system_config.display()
+        );
+        let stub = ssh_dir.join("config");
+        fs::write(&stub, legacy.as_bytes()).unwrap();
+        fs::set_permissions(&stub, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::write(ssh_dir.join("known_hosts"), b"unrelated-test-entry\n").unwrap();
+        let state: SharedAppState = Arc::new(Mutex::new(AppState::default()));
+        let lifecycle = Arc::new(lifecycle::Lifecycle::new());
+        let app = tauri::test::mock_builder()
+            .manage(state.clone())
+            .manage(lifecycle.clone())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let handle = app.handle().clone();
+        let cleanup = RuntimeSmokeCleanup::new(
+            handle.clone(),
+            state.clone(),
+            tmp.clone(),
+            ports.sandbox_port,
+            ports.proxy_port,
+        );
+        if fail_commit {
+            env_guard.set("CSSWITCH_TEST_MANAGED_LAUNCH_COMMIT_FAILURE", "1");
+        }
+        ports.release_one_click_ports();
+        let first = sandbox_session::one_click_login(
+            handle.clone(),
+            state.clone(),
+            lifecycle.as_ref(),
+            None,
+            None,
+        );
+        if fail_commit {
+            assert!(
+                first.is_err(),
+                "injected commit failure must not report success"
+            );
+            assert_eq!(
+                fs::read(&stub).unwrap(),
+                legacy.as_bytes(),
+                "rollback must restore V1, not strand a V2 migration"
+            );
+            assert!(config::load_from(&dir)
+                .unwrap()
+                .runtime_transaction
+                .is_none());
+            env::remove_var("CSSWITCH_TEST_MANAGED_LAUNCH_COMMIT_FAILURE");
+            let retry = sandbox_session::one_click_login(
+                handle,
+                state.clone(),
+                lifecycle.as_ref(),
+                None,
+                None,
+            );
+            assert!(
+                retry.as_ref().is_ok_and(|v| v["action"] == "started"),
+                "retry must start: {retry:?}"
+            );
+        } else {
+            assert!(
+                first.as_ref().is_ok_and(|v| v["action"] == "started"),
+                "legacy upgrade must start: {first:?}"
+            );
+        }
+        crate::runtime::settings::validate_managed_sandbox_ssh_stub(
+            &sandbox_home,
+            &["isolated-test-host".into()],
+        )
+        .unwrap();
+        assert!(lock(&state).proxy.is_some());
+        assert!(crate::proc::http_health(ports.sandbox_port, None, 1000));
+        assert_eq!(authority_tree(&home.join(".ssh")), system_before);
+        assert_eq!(
+            fs::read(ssh_dir.join("known_hosts")).unwrap(),
+            b"unrelated-test-entry\n"
+        );
+        cleanup
+            .finish()
+            .expect("legacy SSH fixture must leave no processes");
     }
 }
 

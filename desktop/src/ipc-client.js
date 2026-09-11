@@ -20,8 +20,8 @@ export async function configureDesktopWindow() {
   try {
     const appWindow = window.__TAURI__.window.getCurrentWindow();
     const LogicalSize = window.__TAURI__.dpi.LogicalSize;
-    await appWindow.setMinSize(new LogicalSize(760, 520));
-    await appWindow.setSize(new LogicalSize(920, 650.5));
+    await appWindow.setMinSize(new LogicalSize(820, 600));
+    await appWindow.setSize(new LogicalSize(1180, 800));
   } catch (_) {
     // 某些受限 WebView 权限下不能改窗口尺寸；界面本身仍保持响应式。
   }

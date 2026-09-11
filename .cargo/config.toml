@@ -1,0 +1,9 @@
+# Keep isolated multi-crate source checks small. Assertions and overflow checks
+# retain Cargo defaults; release optimization/signing are unchanged.
+[profile.dev]
+debug = 0
+incremental = false
+
+[profile.test]
+debug = 0
+incremental = false

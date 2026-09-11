@@ -1,14 +1,13 @@
 import {
   PREVIEW,
   PROFILE_INTERACTIVE_PREVIEW,
-  SKILLS_PREVIEW,
   mockStore,
 } from "./preview-adapter.js";
-import { createCodexController } from "./codex-controller.js";
+import { runtimeCommandErrorText } from "./runtime-error.js";
 import { call, configureDesktopWindow, listen } from "./ipc-client.js";
 import { createProfileController } from "./profile-controller.js";
 import { createRuntimeController } from "./runtime-controller.js";
-import { RUNTIME_STATUS_LABELS, normalizeRuntimeLight } from "./runtime-status-state.js";
+import { runtimeStatusLabel, normalizeRuntimeLight } from "./runtime-status-state.js";
 
 // CSSwitch 桌面面板前端。只调用后端 Tauri command，绝不碰任何密钥落盘逻辑。
 // 后端只把 key 的【掩码】回显给这里；完整 key 永不进前端。
@@ -41,10 +40,8 @@ let lastBootSequence = -1;
 let pendingConfirm = null;          // 危险操作（清 key / 删除）的「再点一次确认」态
 
 const PAGE_META = {
-  switch: ["", "模型连接", ""],
-  skills: ["", "Skill & MCP", ""],
-  status: ["", "状态", ""],
-  settings: ["", "设置", ""],
+  switch: ["工作台", "研究，从这里出发。", "连接你信赖的模型，把专注留给下一次发现。"],
+  settings: ["偏好设置", "让工作空间，合你心意。", "管理本地端口与运行权限，保留简单、可控的使用方式。"],
 };
 
 const THEME_STORAGE_KEY = "csswitch-theme";
@@ -60,21 +57,26 @@ function savedTheme() {
 function applyTheme(theme, { persist = true } = {}) {
   const value = theme === "dark" ? "dark" : "light";
   document.documentElement.dataset.theme = value;
-  if (els.themeBtn) els.themeBtn.textContent = value === "dark" ? "切换浅色主题" : "切换深色主题";
+  if (els.themeBtn) {
+    const label = value === "dark" ? "切换浅色主题" : "切换深色主题";
+    els.themeBtn.setAttribute("aria-label", label);
+    els.themeBtn.title = label;
+    $("themeLabel").textContent = value === "dark" ? "浅色" : "深色";
+  }
   if (persist) {
     try { window.localStorage?.setItem(THEME_STORAGE_KEY, value); } catch (_) {}
   }
 }
 
 function setPage(page) {
-  if (page === "profiles") page = "switch";
+  if (!["switch", "settings"].includes(page)) page = "switch";
   const meta = PAGE_META[page] || PAGE_META.switch;
   document.querySelectorAll("[data-page]").forEach((node) => node.classList.toggle("active", node.dataset.page === page));
   document.querySelectorAll("[data-page-target]").forEach((node) => node.classList.toggle("active", node.dataset.pageTarget === page));
+  document.querySelectorAll("[data-page-target]").forEach((node) => node.setAttribute("aria-current", node.dataset.pageTarget === page ? "page" : "false"));
   if (els.pageEyebrow) els.pageEyebrow.textContent = meta[0];
   if (els.pageTitle) els.pageTitle.textContent = meta[1];
   if (els.pageSubtitle) els.pageSubtitle.textContent = meta[2];
-  if (page === "skills") skillPage?.ensureLoaded();
 }
 
 /** Normalize auto-boot failure payload: plain string (legacy) or one-click DTO object. */
@@ -106,6 +108,29 @@ function setMsg(text, kind) {
   els.msg.parentElement.hidden = !t && (!els.browserFallback || els.browserFallback.hidden);
 }
 
+// Dismiss presentation only; do not cancel a task, clear its result, or mutate runtime state.
+function dismissFeedback() {
+  const panel = els.msg.parentElement;
+  const focusInside = panel.contains(document.activeElement);
+  panel.hidden = true;
+  if (focusInside) {
+    const target = els.doctorBtn && !els.doctorBtn.disabled
+      ? els.doctorBtn : document.querySelector('[data-page-target="switch"]');
+    target?.focus();
+  }
+}
+
+function wireFeedbackDismissal() {
+  $("feedbackCloseBtn").addEventListener("click", dismissFeedback);
+  document.addEventListener("keydown", (event) => {
+    // An open confirmation dialog owns Escape; never swallow its cancel gesture.
+    if (event.key !== "Escape" || event.defaultPrevented || event.isComposing
+        || document.querySelector("dialog[open]") || els.msg.parentElement.hidden) return;
+    event.preventDefault();
+    dismissFeedback();
+  });
+}
+
 function setBrowserFallback(url) {
   const value = typeof url === "string" ? url.trim() : "";
   els.browserFallbackUrl.value = value;
@@ -122,15 +147,15 @@ function setLight(el, s) {
 }
 
 function setStatusText(id, status) {
-  const normalized = normalizeRuntimeLight(status);
+  const label = runtimeStatusLabel(id, status);
   const node = $(id);
-  if (node) node.textContent = RUNTIME_STATUS_LABELS[normalized];
+  if (node) node.textContent = label;
   document.querySelectorAll('[data-mirror-text="' + id + '"]').forEach((mirror) => {
-    mirror.textContent = RUNTIME_STATUS_LABELS[normalized];
+    mirror.textContent = label;
   });
 }
 
-const PROXY_UNHEALTHY_MSG = "代理进程不可达或已退出，请点击「一键开始」恢复。";
+const PROXY_UNHEALTHY_MSG = "代理进程不可达或已退出，请点击「启动 Science」恢复。";
 
 function proxyRecoveryMessage(status) {
   const err = status && status.last_error;
@@ -192,7 +217,7 @@ function startActivateFeedback(id) {
 function startSaveConnectionFeedback(id, selected) {
   clearBusyMsgTimers();
   if (selected) {
-    setMsg("正在保存当前选择的连接；当前运行链保持不变，下次一键开始时应用…");
+    setMsg("正在保存当前选择的连接；当前运行链保持不变，下次启动 Science时应用…");
     scheduleBusyMsg(4500, { kind: "saveConnection", id }, "仍在等待候选连接上游校验。当前运行链保持不变。");
     scheduleBusyMsg(18000, { kind: "saveConnection", id }, "上游校验接近等待上限。验证后只保存候选连接。");
     return;
@@ -203,7 +228,7 @@ function startSaveConnectionFeedback(id, selected) {
 
 function startOneClickFeedback() {
   clearBusyMsgTimers();
-  setMsg("一键开始：检查代理 → 保护凭据与历史 → 准备虚拟登录 → 启动/复用沙箱 → 探活…");
+  setMsg("启动 Science：检查代理 → 保护凭据与历史 → 准备虚拟登录 → 启动/复用沙箱 → 探活…");
   scheduleBusyMsg(3500, { kind: "oneClick" }, "正在建立启动事务并保护凭据、组织历史和插件配置；不会复制 Science 的 Conda 或 Runtime 环境。");
   scheduleBusyMsg(9000, { kind: "oneClick" }, "仍在准备受保护状态或启动沙箱。完成后会自动打开 Science；失败会显示日志摘要。");
 }
@@ -213,7 +238,7 @@ function startSwitchModeFeedback(targetMode) {
   const toOfficial = targetMode === "official";
   setMsg(toOfficial
     ? "正在切到官方模式：停止第三方代理/沙箱并保存模式…"
-    : "正在切到第三方模式：保存模式，完成后可选择配置并一键开始…");
+    : "正在切到第三方模式：保存模式，完成后可选择配置并启动 Science…");
   scheduleBusyMsg(3500, { kind: "switchMode", id: targetMode }, toOfficial
     ? "仍在停止第三方链路。真实 Claude Science 实例不会被触碰。"
     : "仍在保存模式切换。当前不会自动启动第三方代理。");
@@ -248,28 +273,24 @@ function setBusy(on, op) {
     els.connSaveBtn, els.connFetchBtn, els.connClearBtn, els.connCancelBtn,
     els.wizModel, els.wizRoleQuality, els.wizRoleFast, els.wizRoleFable,
     els.connModel, els.connRoleQuality, els.connRoleFast, els.connRoleFable,
-    els.metaSaveBtn, els.metaCancelBtn,
-    els.codexEnabled, els.codexStatusBtn, els.codexLoginBtn, els.codexRepairProfileBtn,
-    els.codexCancelBtn, els.codexLogoutBtn, els.codexNetworkMode, els.codexProxyUrl,
-    els.codexNetworkSaveBtn, els.codexDowngradeBtn,
+    els.metaSaveBtn, els.metaCancelBtn, $("saveSettingsBtn"),
     // 端口输入也纳入忙碌禁用：忙碌中改端口会与在途操作竞态（修 P1-c 前端侧）。
     els.proxyPort, els.sandboxPort, els.reuseSystemSsh,
   ].forEach((b) => b && (b.disabled = on));
   syncOpenBrowserControl();
   if (skillPage) skillPage.setGlobalBusy(on);
-  // 模式切换按钮同样禁用：忙碌中切官方会与「一键开始」竞态（修 P1-b 前端侧）。
+  // 模式切换按钮同样禁用：忙碌中切官方会与「启动 Science」竞态（修 P1-b 前端侧）。
   if (els.modeSeg) els.modeSeg.querySelectorAll(".seg-btn").forEach((b) => (b.disabled = on));
   profileController.syncProfileBusyState();
   // 松开忙碌时，把模型必填保存门控交回门（避免 setBusy(false) 覆盖门控）。
   if (!on) { profileController.refreshWizGate(); profileController.refreshConnGate(); }
   syncActivationControls();
-  codexController.syncCodexControls();
 }
 
 function syncOpenBrowserControl() {
   if (!els.openBrowserBtn) return;
   els.openBrowserBtn.disabled = busy || runtimeController.isBrowserOpenInFlight();
-  els.openBrowserBtn.textContent = runtimeController.isBrowserOpenInFlight() ? "打开中…" : "浏览器打开";
+  els.openBrowserBtn.textContent = runtimeController.isBrowserOpenInFlight() ? "打开中…" : "打开 Science";
 }
 
 function syncActivationControls() {
@@ -285,7 +306,6 @@ function syncActivationControls() {
   profileController.syncProfileBusyState();
   profileController.refreshWizGate();
   profileController.refreshConnGate();
-  codexController.syncCodexControls();
 }
 
 function setActivationInFlight(on, op) {
@@ -328,22 +348,6 @@ function confirmAction(token, promptText, fn) {
   setMsg(promptText + " —— 再点一次同一按钮确认（4 秒内）。", "err");
 }
 
-const codexController = createCodexController({
-  els,
-  getConfigState: () => configState,
-  isBusy: () => busy,
-  isActivationInFlight: () => activationInFlight,
-  setMsg,
-  setBusy,
-  loadConfig: (...args) => profileController.loadConfig(...args),
-  renderList: (...args) => profileController.renderList(...args),
-  isCodexSource: (...args) => profileController.isCodexSource(...args),
-  confirmAction,
-  getStatusTimer: () => statusTimer,
-  setStatusTimer: (value) => { statusTimer = value; },
-  refreshStatus: (...args) => runtimeController.refreshStatus(...args),
-});
-
 profileController = createProfileController({
   els,
   getConfigState: () => configState,
@@ -367,13 +371,6 @@ profileController = createProfileController({
   startSaveConnectionFeedback,
   startSwitchModeFeedback,
   startPortSaveFeedback,
-  codex: {
-    refreshCodexProfileRepairState: (...args) => codexController.refreshCodexProfileRepairState(...args),
-    renderCodexAuthState: (...args) => codexController.renderCodexAuthState(...args),
-    renderCodexNetwork: (...args) => codexController.renderCodexNetwork(...args),
-    syncCodexControls: (...args) => codexController.syncCodexControls(...args),
-    runtimeCommandErrorText: (...args) => codexController.runtimeCommandErrorText(...args),
-  },
   runtime: {
     hideHistoryRecovery: (...args) => runtimeController.hideHistoryRecovery(...args),
     refreshStatus: (...args) => runtimeController.refreshStatus(...args),
@@ -396,7 +393,7 @@ runtimeController = createRuntimeController({
   startDoctorFeedback,
   isCodexSource: (...args) => profileController.isCodexSource(...args),
   renderList: (...args) => profileController.renderList(...args),
-  runtimeCommandErrorText: (error) => codexController.runtimeCommandErrorText(error),
+  runtimeCommandErrorText: runtimeCommandErrorText,
   syncOpenBrowserControl,
   setLight,
   setStatusText,
@@ -411,8 +408,6 @@ function wire() {
     "historyRecoverySec", "historyRecoveryText", "historyRecoveryChoices", "historyRecoveryCancelBtn",
     "msg", "browserFallback", "browserFallbackUrl", "browserFallbackCopyBtn", "browserFallbackRetryBtn", "brandDot", "openBrowserBtn", "doctorBtn", "repairSkillRouteBtn", "updateBtn", "verLabel",
     "reportBtn", "logsBtn", "quitBtn", "modeSeg", "proxyPort", "sandboxPort", "reuseSystemSsh", "advSec",
-    "codexEnabled", "codexAuthStatus", "codexStatusBtn", "codexLoginBtn", "codexCancelBtn", "codexLogoutBtn", "codexProfileRepairBox", "codexRepairProfileBtn",
-    "codexNetworkMode", "codexProxyUrl", "codexNetworkResolved", "codexNetworkSaveBtn", "codexDowngradeBox", "codexDowngradeBtn",
     "connectionOverview", "listSec", "profileList", "newBtn",
     "wizSec", "wizTemplate", "wizTemplateChips", "wizTplLabel", "wizTplHint", "wizName", "wizBaseGroup", "wizBase", "wizBaseHint",
     "wizModelGroup", "wizModelLabel", "wizFetchBtn", "wizModelInfo", "wizModel", "wizModelHint", "wizCodexCatalog", "wizCodexCatalogMeta", "wizCodexCatalogList", "wizStaticCatalog", "wizRoleQuality", "wizRoleFast", "wizRoleFable", "wizCatalogWarning", "wizKeyGroup", "wizKey", "wizSaveBtn", "wizCancelBtn",
@@ -420,10 +415,10 @@ function wire() {
     "connModelGroup", "connModelLabel", "connModelInfo", "connModel", "connModelHint", "connCodexCatalog", "connCodexCatalogMeta", "connCodexCatalogList", "connStaticCatalog", "connRoleQuality", "connRoleFast", "connRoleFable", "connCatalogWarning", "connKeyGroup", "connKey", "connSaveBtn", "connClearBtn", "connCancelBtn",
     "metaSec", "metaName", "metaNotes", "metaSaveBtn", "metaCancelBtn",
     "themeBtn", "pageEyebrow", "pageTitle", "pageSubtitle",
-    "currentProfileIcon", "currentProfileName", "currentProfileState", "currentRouteMode", "currentProfileModel", "currentProfileMeta",
     "proxyStateText", "sandboxStateText", "upstreamStateText",
   ].forEach((id) => (els[id] = $(id)));
   els.panel = document.querySelector(".panel");
+  wireFeedbackDismissal();
 
   document.querySelectorAll("[data-page-target]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -434,22 +429,18 @@ function wire() {
   applyTheme(savedTheme() || document.documentElement.dataset.theme || "light", { persist: false });
   els.themeBtn.addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 
-  els.modeSeg.querySelectorAll(".seg-btn").forEach((b) =>
-    b.addEventListener("click", () => profileController.switchMode(b.dataset.mode))
-  );
 
-  els.proxyPort.addEventListener("change", profileController.persistRuntimeSettings);
-  els.sandboxPort.addEventListener("change", profileController.persistRuntimeSettings);
-  els.reuseSystemSsh.addEventListener("change", profileController.persistRuntimeSettings);
-  els.codexEnabled.addEventListener("change", codexController.toggleCodexFeature);
-  els.codexStatusBtn.addEventListener("click", codexController.checkCodexAuth);
-  els.codexLoginBtn.addEventListener("click", codexController.startCodexLogin);
-  els.codexRepairProfileBtn.addEventListener("click", codexController.repairCodexProfile);
-  els.codexCancelBtn.addEventListener("click", codexController.cancelCodexLogin);
-  els.codexLogoutBtn.addEventListener("click", codexController.logoutCodex);
-  els.codexNetworkMode.addEventListener("change", codexController.codexNetworkModeChanged);
-  els.codexNetworkSaveBtn.addEventListener("click", codexController.saveCodexNetwork);
-  els.codexDowngradeBtn.addEventListener("click", codexController.requestCodexDowngrade);
+  $("saveSettingsBtn").addEventListener("click", profileController.persistRuntimeSettings);
+  $("profileSearch").addEventListener("input", profileController.renderList);
+  $("batchManageBtn").addEventListener("click", profileController.toggleBatchMode);
+  $("batchDeletePhrase").addEventListener("input", profileController.syncBatchConfirmation);
+  $("batchClearSelection").addEventListener("click", profileController.clearSelection);
+  $("batchClearKeys").addEventListener("click", () => profileController.requestBatch("clearkey"));
+  $("batchDelete").addEventListener("click", () => profileController.requestBatch("delete"));
+  $("batchConfirm").addEventListener("click", profileController.confirmBatch);
+  $("batchCancel").addEventListener("click", profileController.cancelBatch);
+  $("batchDialog").addEventListener("cancel", e => { e.preventDefault(); profileController.cancelBatch(); });
+
 
   // 列表行内操作（事件委托；忙碌时忽略）。
   els.profileList.addEventListener("click", (e) => {
@@ -468,6 +459,8 @@ function wire() {
 
   // 浏览器交互预览可单独启用模型下拉；真实 App 始终使用后端已保存模型。
   els.profileList.addEventListener("change", (e) => {
+    const checkbox = e.target.closest("[data-select-profile]");
+    if (checkbox) { profileController.changeSelection(checkbox.dataset.selectProfile, checkbox.checked); return; }
     const select = e.target.closest("[data-profile-model]");
     if (!select || !PROFILE_INTERACTIVE_PREVIEW) return;
     const id = select.getAttribute("data-profile-model");
@@ -518,7 +511,6 @@ function wire() {
   });
   els.historyRecoveryCancelBtn.addEventListener("click", runtimeController.hideHistoryRecovery);
   els.stopBtn.addEventListener("click", runtimeController.stopAll);
-  els.importSkillBtn.addEventListener("click", runtimeController.importLocalSkill);
   els.openBrowserBtn.addEventListener("click", runtimeController.openBrowser);
   els.browserFallbackRetryBtn.addEventListener("click", runtimeController.openBrowser);
   els.browserFallbackCopyBtn.addEventListener("click", async () => {
@@ -531,11 +523,6 @@ function wire() {
     }
   });
   els.doctorBtn.addEventListener("click", runtimeController.runDoctorReadOnly);
-  els.repairSkillRouteBtn.addEventListener("click", runtimeController.repairSkillRoute);
-  els.updateBtn.addEventListener("click", runtimeController.checkUpdate);
-  els.reportBtn.addEventListener("click", () =>
-    call("report_bug").catch((e) => setMsg("打开反馈页失败：" + e, "err"))
-  );
   els.logsBtn.addEventListener("click", () =>
     call("open_logs").catch((e) => setMsg("打开日志失败：" + e, "err"))
   );
@@ -551,19 +538,9 @@ function wire() {
 
 window.addEventListener("DOMContentLoaded", async () => {
   wire();
-  try { await codexController.registerCodexAuthEvents(); } catch (e) { setMsg("无法订阅 Codex 登录状态：" + e, "err"); }
   await configureDesktopWindow();
-  try {
-    const { mountSkillPage } = await import("./skill-page.js");
-    skillPage = mountSkillPage($("skillPageRoot"), {
-      call,
-      refreshButton: els.refreshSkillsBtn,
-      importButton: els.importSkillBtn,
-    });
-  } catch (e) {
-    $("skillPageRoot").innerHTML = '<div class="skill-loading">Skill 页面载入失败：' + escapeHtml(e) + "</div>";
-  }
-  setPage(SKILLS_PREVIEW ? "skills" : "switch");
+  setPage("switch");
+  $("previewNotice").hidden = !PREVIEW;
   await profileController.loadConfig();
   const applyBootPublication = (publication) => {
     if (!publication || !Number.isSafeInteger(publication.sequence) || publication.sequence < 0) return;
@@ -573,7 +550,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     const payload = publication.payload;
     if (publication.state === "failed" && payload) {
       runtimeController.publishFinalizeUnknown();
-      setMsg("自动启动未成功：" + formatBootFailure(payload) + "\n可检查配置后点「一键开始」重试。", "err");
+      setMsg("自动启动未成功：" + formatBootFailure(payload) + "\n可检查配置后点「启动 Science」重试。", "err");
       runtimeController.refreshStatus();
     } else if (publication.state === "attention" && payload) {
       runtimeController.publishFinalizeUnknown();

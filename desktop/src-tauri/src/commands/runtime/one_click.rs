@@ -148,6 +148,8 @@ pub(crate) fn one_click_login_cmd<R: tauri::Runtime>(
             drop(auth_lease);
             continue;
         }
+        // Local recovery must remain reachable even when the old account profile is hidden.
+        crate::api_only::require_api_profile(&config::default_dir(), None)?;
         let auth_result = crate::commands::codex::prepare_provider_auth(
             &app,
             entry.auth_adapter(),

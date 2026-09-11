@@ -139,6 +139,7 @@ function mockIntentOutcome(operation, disposition, extra = {}) {
     ...extra,
   };
 }
+
 export function mockInvoke(cmd, args) {
   args = args || {};
   const mockIntentOutcome = (operation, disposition, extra = {}) => ({
@@ -220,24 +221,28 @@ export function mockInvoke(cmd, args) {
       if (mockStore.active_id === args.id) mockStore.selection_pending = true;
       return Promise.resolve(mockIntentOutcome("update_profile_connection", "committed", { validated: true, committed: true, status: "ok" }));
     }
-    case "clear_profile_key": {
-      const p = mockStore.profiles.find((x) => x.id === args.id);
-      if (p) p.key = "";
-      if (mockStore.applied_profile_id === args.id) {
-        mockStore.applied_profile_id = null;
-        mockStore.selection_pending = !!mockStore.active_id;
-      } else if (mockStore.active_id === args.id) {
-        mockStore.selection_pending = true;
+    case "clear_profile_key":
+    case "delete_profile": {
+      const existed = mockStore.profiles.some(p => p.id === args.id);
+      const wasApplied = mockStore.applied_profile_id === args.id;
+      if (cmd === "delete_profile") {
+        mockStore.profiles = mockStore.profiles.filter(p => p.id !== args.id);
+        if (mockStore.active_id === args.id) mockStore.active_id = "";
+      } else {
+        const p = mockStore.profiles.find(p => p.id === args.id);
+        if (p) { p.key = ""; p.has_key = false; p.key_masked = ""; }
       }
-      return Promise.resolve(mockIntentOutcome("clear_profile_key", "committed", { committed: true, status: "ok" }));
+      if (wasApplied) mockStore.applied_profile_id = null;
+      mockStore.selection_pending = !!mockStore.active_id && mockStore.active_id !== mockStore.applied_profile_id;
+      if (wasApplied) return Promise.resolve({
+        schema_version: 1, operation_id: "abcdef0123456789abcdef0123456789",
+        operation: cmd === "delete_profile" ? "delete_applied_profile" : "clear_applied_profile_key",
+        disposition: "completed", config_state: "after", runtime_state: "stopped", recovery_state: "not_needed",
+      });
+      return Promise.resolve(mockIntentOutcome(cmd, existed ? "committed" : "no_change", {
+        config_state: "committed", validation: "not_run", committed: true, status: "ok",
+      }));
     }
-    case "delete_profile":
-      mockStore.profiles = mockStore.profiles.filter((x) => x.id !== args.id);
-      if (mockStore.active_id === args.id) mockStore.active_id = "";
-      if (mockStore.applied_profile_id === args.id) mockStore.applied_profile_id = null;
-      mockStore.selection_pending = !!mockStore.active_id &&
-        mockStore.active_id !== mockStore.applied_profile_id;
-      return Promise.resolve(mockIntentOutcome("delete_profile", "committed", { committed: true, status: "ok" }));
     case "set_active_profile": {
       const p = mockStore.profiles.find((x) => x.id === args.id);
       if (!p) return Promise.reject("找不到 profile：" + args.id);
@@ -368,6 +373,7 @@ export function mockInvoke(cmd, args) {
     case "status":
       if (QUERY.get("status") === "error") return Promise.reject(new Error("预览注入：运行状态查询失败"));
       if (QUERY.get("status") === "partial") return Promise.resolve({ proxy: "green", sandbox: "green", upstream: "amber" });
+      if (QUERY.get("status") === "stopped-network-ready") return Promise.resolve({ proxy: "amber", sandbox: "amber", upstream: "green" });
       if (QUERY.get("status") === "stopped") return Promise.resolve({ proxy: "amber", sandbox: "amber", upstream: "amber" });
       return Promise.resolve({ proxy: "green", sandbox: "green", upstream: "green" });
     case "boot_snapshot":
@@ -375,7 +381,9 @@ export function mockInvoke(cmd, args) {
     case "app_version":
       return Promise.resolve("0.0.0-preview");
     case "run_doctor_read_only":
-      return Promise.resolve({ schema_version: 1, intent: "read_only_diagnostics", status: "passed", message: "（预览模式：只读诊断占位结果）" });
+      return Promise.resolve({ schema_version: 1, intent: "read_only_diagnostics", status: "passed", message: QUERY.get("doctor") === "long"
+        ? ["界面测试报告 · 以下为虚拟内容，未检查真实环境", ...Array.from({length:60}, (_, i) => `演示检查 ${i + 1}：用于验证长报告滚动与关闭按钮，不代表真实检测结果。`)].join("\n")
+        : "（预览模式：只读诊断占位结果）" });
     case "repair_skill_route":
       return Promise.resolve({ schema_version: 1, intent: "repair_skill_route", status: "synchronized", message: "（预览模式：Skill 路由修复占位结果）" });
     default:

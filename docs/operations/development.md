@@ -1,5 +1,7 @@
 # 开发与维护
 
+仓库 `.cargo/config.toml` 关闭 dev/test 调试符号与增量缓存，以控制隔离多 crate 验证的磁盘占用；保留默认断言、溢出检查和 release 优化设置。需要调试符号时，可在个人开发调用中用 Cargo 环境变量覆盖，不将该覆盖当作正式门禁证据。
+
 本文说明当前源码树的开发入口。安全、Git / worktree 和证据措辞分别以 [`.agents/rules/`](../../.agents/rules/) 为准。
 
 ## 环境

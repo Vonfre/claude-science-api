@@ -44,7 +44,7 @@ fn load_without_runtime_transaction(dir: &Path) -> Result<config::Config, String
 
 #[tauri::command]
 pub(crate) fn get_config() -> Result<serde_json::Value, String> {
-    build_get_config(&config::default_dir())
+    build_get_config(&config::default_dir()).map(crate::api_only::project_config)
 }
 
 #[tauri::command]
@@ -68,6 +68,7 @@ pub(crate) fn create_profile(
     default_model_route_id: Option<String>,
     role_bindings: Option<crate::model_catalog::RoleBindings>,
 ) -> Result<String, String> {
+    crate::api_only::require_api_template(&template_id)?;
     let catalog_edit = catalog_edit_from_parts(
         model.is_some(),
         model_catalog,
@@ -95,6 +96,7 @@ pub(crate) fn update_profile_metadata(
     notes: Option<String>,
 ) -> Result<(), String> {
     lifecycle.with_mutation(lifecycle::RuntimeMutationDomain::Intent, |_| {
+        crate::api_only::require_api_mutation_target(&config::default_dir(), &id)?;
         update_profile_metadata_inner(&config::default_dir(), &id, &name, notes.as_deref())
     })
 }
@@ -107,6 +109,7 @@ pub(crate) fn clear_profile_key(
     lifecycle: State<'_, SharedLifecycle>,
     id: String,
 ) -> Result<serde_json::Value, crate::commands::codex::RuntimeCommandError> {
+    crate::api_only::require_api_mutation_target(&config::default_dir(), &id)?;
     clear_profile_key_p2b(
         &config::default_dir(),
         state.inner(),
@@ -123,6 +126,7 @@ pub(crate) fn delete_profile(
     lifecycle: State<'_, SharedLifecycle>,
     id: String,
 ) -> Result<serde_json::Value, crate::commands::codex::RuntimeCommandError> {
+    crate::api_only::require_api_mutation_target(&config::default_dir(), &id)?;
     delete_profile_p2b(
         &config::default_dir(),
         state.inner(),
@@ -586,6 +590,7 @@ pub(crate) async fn update_profile_connection(
     default_model_route_id: Option<String>,
     role_bindings: Option<crate::model_catalog::RoleBindings>,
 ) -> Result<serde_json::Value, crate::commands::codex::RuntimeCommandError> {
+    crate::api_only::require_api_profile(&config::default_dir(), Some(&id))?;
     let lifecycle = lifecycle.inner().clone();
     run_blocking_typed(move || {
         update_profile_connection_inner_cmd(
@@ -796,6 +801,7 @@ pub(crate) async fn set_active_profile(
     lifecycle: State<'_, SharedLifecycle>,
     id: String,
 ) -> Result<serde_json::Value, crate::commands::codex::RuntimeCommandError> {
+    crate::api_only::require_api_profile(&config::default_dir(), Some(&id))?;
     let state = state.inner().clone();
     let lifecycle = lifecycle.inner().clone();
     run_blocking_typed(move || set_active_profile_inner_cmd(state, lifecycle, id)).await
@@ -1904,5 +1910,4 @@ mod tests {
         )
         .is_err());
     }
-
 }

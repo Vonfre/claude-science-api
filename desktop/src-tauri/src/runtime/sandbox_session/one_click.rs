@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use csswitch_skill_install_core::{open_science_health_session_before, ScienceHealthSession};
 use serde_json::{json, Value};
-use tauri::{Manager, Runtime};
+use tauri::Runtime;
 
 use crate::runtime::failure::{OneClickFailureKind, ProjectedRecovery, TypedOneClickFailure};
 use crate::runtime::operation::{
@@ -25,7 +25,7 @@ use crate::runtime::science::{
 use crate::runtime::skill_install_bridge::{
     inspect_while_science_running, register_before_science_start, RegistrationStatus,
 };
-use crate::runtime::system::{asset_root, log_path, open_in_browser, open_log, redact, tail_file};
+use crate::runtime::system::{asset_root, log_path, open_log, redact, tail_file};
 use crate::{
     config, lifecycle, lock, oauth_forge, proc, HistoryRecoveryChoice,
     HistoryRecoveryScienceQuiescence, HistoryRecoverySession, SharedAppState,
@@ -382,36 +382,10 @@ pub(crate) fn typed_interrupted_gateway_recovery_error(
 }
 
 fn open_science_surface<R: Runtime>(
-    app: &tauri::AppHandle<R>,
+    _app: &tauri::AppHandle<R>,
     url: &str,
 ) -> Result<&'static str, String> {
-    if std::env::var("CSSWITCH_SCIENCE_WEBVIEW_SPIKE")
-        .ok()
-        .as_deref()
-        == Some("1")
-    {
-        if let Some(win) = app.get_webview_window("science") {
-            let _ = win.close();
-        }
-        let parsed = url
-            .parse()
-            .map_err(|e| format!("Science URL 解析失败：{e}"))?;
-        match tauri::WebviewWindowBuilder::new(app, "science", tauri::WebviewUrl::External(parsed))
-            .title("Claude Science")
-            .inner_size(1100.0, 800.0)
-            .build()
-        {
-            Ok(win) => {
-                let _ = win.set_focus();
-                return Ok("webview");
-            }
-            Err(_) => {
-                // Spike-only path: construction failure falls through to the existing browser surface.
-            }
-        }
-    }
-    open_in_browser(url)?;
-    Ok("browser")
+    crate::runtime::system::open_in_browser(url).map(|_| "browser")
 }
 
 fn installer_status_json(status: &RegistrationStatus) -> Value {

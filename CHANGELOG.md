@@ -1,5 +1,24 @@
 # Changelog
 
+
+## [0.9.0] — 2026-09-11
+
+### 研舟 · SciPort / API-only workspace
+
+- 全新雾白与深绿工作台、窄导航、深浅主题，以及集中式启动与分层状态。 / Redesigned workbench, slim navigation, light/dark themes, and distinct runtime status layers.
+- API 列表支持搜索、模型编辑与批量管理；选择连接与启动应用分开。 / Searchable API profiles, model editing, batch actions, and explicit selection-versus-application state.
+- 移除 Science 中文切换及其扩展/原生命令；不再公开账号登录、官方模式和 Skill/MCP 管理入口。 / Retired Science translation and its extension/native commands; account sign-in, official-mode switching, and Skill/MCP management are not exposed.
+- 应用改名为 SciPort.app；保留 bundle ID 和配置目录，不自动删除旧数据。 / Renamed the app to SciPort.app while preserving the bundle ID and configuration directory.
+- 提供完整中英文 README。 / Added complete Chinese and English README guides.
+
+### Boundaries / 限制
+
+- macOS Apple Silicon only; ad-hoc signing, no Developer ID or Apple notarization.
+- Official directory-connector session errors remain unresolved. Model connectivity is not official account authorization.
+- Real-provider, real-account, and SSH-server calls are not claimed as validated by this release.
+- Quit CSSwitch before installing; disable previously installed translation extensions manually. See README for upgrade and rollback guidance.
+- Earlier entries below describe upstream CSSwitch history, not the current API-only interface.
+
 ## [0.8.4] — 2026-07-29
 
 ### Fixed

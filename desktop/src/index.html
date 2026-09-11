@@ -3,95 +3,60 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CSSwitch</title>
+    <title>研舟 · SciPort</title>
     <link rel="stylesheet" href="/styles.css" />
     <script type="module" src="/main.js" defer></script>
   </head>
   <body>
     <div class="panel app-shell">
-      <aside class="sidebar" data-tauri-drag-region>
+      <aside class="sidebar" aria-label="工作空间导航">
         <div class="brand-lockup" data-tauri-drag-region>
-          <img class="brand-mark" src="data:image/png;base64,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" alt="" aria-hidden="true" />
-          <div class="brand-name">CSSwitch</div>
+          <svg class="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M20 5v23H7L20 5Z" fill="currentColor"/><path d="m24 12 10 16H24V12Z" fill="currentColor" opacity=".45"/><path d="M6 32h29l-6 4H12l-6-4Z" fill="currentColor"/></svg>
+          <span class="brand-name">研舟</span>
         </div>
-
         <nav class="primary-nav" aria-label="主导航">
-          <button class="nav-item active" type="button" data-page-target="switch">
-            <span>模型连接</span>
-          </button>
-          <button class="nav-item" type="button" data-page-target="skills">
-            <span>Skill &amp; MCP</span>
-          </button>
-          <button class="nav-item" type="button" data-page-target="status">
-            <span>状态</span>
-          </button>
-          <button class="nav-item" type="button" data-page-target="settings">
-            <span>设置</span>
-          </button>
+          <button class="nav-item active" type="button" data-page-target="switch" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg><span>工作台</span></button>
+          <button class="nav-item" type="button" data-page-target="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="16" cy="17" r="3"/></svg><span>设置</span></button>
         </nav>
-
         <div class="sidebar-spacer"></div>
-        <div class="sidebar-status">
-          <span id="brandDot" class="dot"></span>
-          <span>本机运行状态</span>
-        </div>
-        <button class="sidebar-action" id="themeBtn" type="button" aria-label="切换深浅主题">切换深色主题</button>
-        <button class="sidebar-action" id="quitBtn" type="button">退出 CSSwitch</button>
-        <div class="sidebar-version">安全隔离 · <span id="verLabel"></span></div>
+        <button class="sidebar-action" id="themeBtn" type="button" aria-label="切换深色主题" title="切换深色主题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 13A9 9 0 0 1 11 3.2 9 9 0 1 0 20.8 13Z"/></svg><span id="themeLabel">深色</span></button>
+        <button class="sidebar-action" id="quitBtn" type="button" title="停止服务并退出研舟"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9M6.3 5.7a8 8 0 1 0 11.4 0"/></svg><span>退出</span></button>
+        <div class="rail-footer">SCIPORT</div>
       </aside>
 
       <main class="workspace">
         <header class="workspace-header" data-tauri-drag-region>
-          <div>
-            <div class="eyebrow" id="pageEyebrow"></div>
-            <h1 id="pageTitle">模型连接</h1>
-            <p id="pageSubtitle"></p>
-          </div>
+          <div class="header-brand">SciPort <span>/</span> <span id="pageEyebrow">工作台</span></div>
+          <div class="header-meta"><span class="header-status"><span id="brandDot" class="dot gray" aria-label="本机运行状态"></span>本地工作空间</span><span class="header-divider"></span><span id="verLabel"></span></div>
         </header>
 
-        <div class="workspace-scroll">
+        <div class="workspace-scroll"><div id="previewNotice" class="preview-notice" hidden>界面演示 · 使用虚拟配置与状态，不会连接真实 API 或启动 Science。</div>
+          <div class="page-heading"><div><div class="section-kicker">YOUR RESEARCH, CONNECTED</div><h1 id="pageTitle">研究，从这里出发。</h1><p id="pageSubtitle">连接你信赖的模型，把专注留给下一次发现。</p></div><span class="page-edition">独立配置 · 自由连接</span></div>
           <section class="app-page active" data-page="switch" aria-labelledby="pageTitle">
             <div class="connection-page list-only" id="connectionOverview">
-              <div class="connection-overview-grid">
-                <section class="surface current-card">
-                  <div class="current-head">
-                    <div class="current-profile-identity">
-                      <img class="model-family-icon current-model-icon" id="currentProfileIcon" src="/assets/model-icons/generic.svg" alt="" aria-hidden="true" />
-                      <div class="current-profile-copy">
-                        <h2 id="currentProfileName">尚未选择配置</h2>
-                        <p class="current-model" id="currentProfileModel">未配置</p>
-                      </div>
-                      <span class="state-pill neutral" id="currentProfileState">等待选择</span>
-                    </div>
+              <section class="surface runtime-panel" aria-labelledby="runtimeHeading">
+                <div class="launchpad">
+                  <div class="launch-copy">
+                    <div class="section-kicker">CLAUDE SCIENCE · 启动台</div>
+                    <h2 id="runtimeHeading">好奇心，不必等待。</h2>
+                    <p>用自己的模型，打开熟悉的科研空间。</p>
+                    <div class="runtime-main-actions"><button class="hero" id="oneClickBtn" type="button">启动 Claude Science ↗</button><button class="btn launch-secondary" id="openBrowserBtn" type="button">打开 Science</button></div>
                   </div>
-                  <span id="currentRouteMode" hidden>CSSwitch 代理</span>
-                  <span id="currentProfileMeta" hidden>从下方选择配置方案</span>
-                  <div class="connection-actions">
-                    <button class="hero" id="oneClickBtn">一键开始</button>
-                    <button class="btn" id="openBrowserBtn">浏览器打开</button>
-                    <button class="btn" id="stopBtn">全部停止</button>
+                  <div class="launch-selection" aria-label="下次启动使用的连接">
+                    <div class="selection-eyebrow"><span class="selection-glyph" aria-hidden="true">↗</span><span>本次启程 · 当前选择</span></div>
+                    <strong id="launchProfileName">尚未选择 API</strong>
+                    <span id="launchModelName" class="launch-model">先添加一个模型连接</span>
+                    <span id="launchSelectionState" class="launch-state">选择后，点击启动</span>
                   </div>
-                </section>
-
-                <aside class="connection-controls">
-                  <section class="surface mode-surface modeseg">
-                    <h2>连接方式</h2>
-                    <div class="seg" id="modeSeg">
-                      <button type="button" class="seg-btn active" data-mode="proxy">第三方模型</button>
-                      <button type="button" class="seg-btn" data-mode="official">官方 Claude</button>
-                    </div>
-                  </section>
-                  <section class="surface status-overview">
-                    <h2>运行状态</h2>
-                    <div class="status-list tp-only">
-                      <div class="status-row"><span><i id="ltProxy" class="lt a"></i>代理</span><strong id="proxyStateText">检查中</strong></div>
-                      <div class="status-row"><span><i id="ltSandbox" class="lt a"></i>Science</span><strong id="sandboxStateText">检查中</strong></div>
-                      <div class="status-row"><span><i id="ltUpstream" class="lt a"></i>上游</span><strong id="upstreamStateText">检查中</strong></div>
-                    </div>
-                    <div class="official-only official-status"><span class="state-pill neutral">由 Science 管理</span></div>
-                  </section>
-                </aside>
-              </div>
+                </div>
+                <div class="runtime-health-grid" aria-label="本地服务状态">
+                  <div class="runtime-health-item"><span><i id="ltProxy" class="lt a"></i>本地网关</span><strong id="proxyStateText">检查中</strong></div>
+                  <div class="runtime-health-item"><span><i id="ltSandbox" class="lt a"></i>Science 服务</span><strong id="sandboxStateText">检查中</strong></div>
+                  <div class="runtime-health-item"><span><i id="ltUpstream" class="lt a"></i>上游网络</span><strong id="upstreamStateText">检查中</strong></div>
+                  <button class="abtn stop-service" id="stopBtn" type="button">停止服务</button>
+                </div>
+                <details class="runtime-diagnostics"><summary>诊断与日志 <span>仅检查，不更改配置</span></summary><div><p>上游网络只检查端口是否可达，不验证密钥、模型或官方账号。自检不会启动服务或修改配置。</p><button class="btn" id="doctorBtn" type="button">运行只读自检</button><button class="btn" id="logsBtn" type="button">打开日志</button></div></details>
+              </section>
 
               <section class="surface runtime-choice" id="runtimeChoiceSec" hidden>
                 <div class="runtime-choice-title">选择 Claude Science 版本</div>
@@ -116,24 +81,29 @@
 
               <section class="surface profiles-surface tp-only" id="listSec">
                 <div class="section-heading profile-heading">
-                  <h2>配置方案</h2>
-                  <button class="btn primary" id="newBtn">新建配置</button>
+                  <div><div class="section-kicker">MODEL CONNECTIONS</div><h2>模型连接 <span id="profileCount" class="count-badge">0</span></h2><p class="profile-selection-hint" id="profileSelectionHint">选择一条 API 后启动 Science。</p></div>
+                  <div class="profile-toolbar"><label class="search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><input id="profileSearch" class="search-input" type="search" aria-label="搜索 API 配置" placeholder="搜索连接或模型…" /></label><button class="btn" id="batchManageBtn" aria-pressed="false">批量管理</button><button class="btn primary" id="newBtn">＋ 添加 API</button></div>
                 </div>
-                <div id="profileList" class="profile-list"></div>
+                <div class="batch-toolbar" id="batchToolbar" hidden role="region" aria-label="批量管理">
+                  <strong id="batchCount" aria-live="polite">请逐项勾选需要管理的 API</strong><button class="abtn" id="batchClearSelection">取消选择</button><div class="batch-actions"><button class="btn" id="batchClearKeys">清除密钥</button><button class="btn danger" id="batchDelete">删除所选</button></div>
+                </div>
+                <div class="profile-table-wrap"><table class="profile-table" aria-label="我的 API 配置"><colgroup><col class="check-col"><col class="name-col"><col class="model-col"><col class="key-col"><col class="actions-col"></colgroup><thead><tr><th class="selection-cell" scope="col"><span class="selection-heading">勾选</span></th><th scope="col">连接名称</th><th scope="col">默认模型</th><th scope="col">密钥</th><th scope="col" class="actions-heading">操作</th></tr></thead><tbody id="profileList" class="profile-list"></tbody></table></div>
+                <dialog id="batchDialog" class="batch-dialog" aria-labelledby="batchDialogTitle" aria-describedby="batchDialogWarning"><div class="section-kicker">BATCH MANAGEMENT</div><h2 id="batchDialogTitle"></h2><p id="batchDialogWarning"></p><ul id="batchDialogNames"></ul><div id="batchDeleteChallenge" hidden><label id="batchDeletePhraseLabel" for="batchDeletePhrase"></label><input id="batchDeletePhrase" autocomplete="off" spellcheck="false" placeholder="输入确认文字" /></div><div class="dialog-actions"><button class="btn" id="batchCancel" autofocus>取消</button><button class="btn danger" id="batchConfirm">确认</button></div></dialog><div class="connection-footnote"><span aria-hidden="true">◇</span> 密钥仅存本机 · 选择连接不会打断当前会话，启动后才应用。</div>
               </section>
+              <aside class="service-boundary" aria-label="官方连接器说明"><span class="boundary-icon" aria-hidden="true">i</span><div><strong>模型连接 ≠ 官方账号登录</strong><p>研舟接入第三方模型，不提供 claude.ai 登录。官方连接器仍需要有效的官方账号会话；模型可用不代表连接器已授权。</p></div><span class="boundary-tag">能力说明 · 非登录检测</span></aside>
             </div>
 
             <section class="surface form-surface tp-only" id="wizSec" hidden>
-              <div class="section-heading compact"><h2>新建配置</h2></div>
+              <div class="section-heading compact"><div><div class="section-kicker">NEW CONNECTION</div><h2>添加 API 连接</h2><p>选择服务商，填写密钥和模型，即可开始。</p></div></div>
               <label id="wizTplLabel">选择服务商</label>
               <div id="wizTemplateChips" class="chips" role="group" aria-labelledby="wizTplLabel"></div>
               <input id="wizTemplate" type="hidden" />
               <div class="hint" id="wizTplHint"></div>
               <div class="form-grid">
-                <div class="field"><label for="wizName">名称</label><input id="wizName" type="text" placeholder="给这套配置起个名字" autocomplete="off" spellcheck="false" /></div>
-                <div class="field" id="wizBaseGroup"><label for="wizBase">地址 base_url</label><input id="wizBase" type="text" placeholder="https://your-relay/claude" autocomplete="off" spellcheck="false" /><div class="hint" id="wizBaseHint"></div></div>
-                <div class="field catalog-field" id="wizModelGroup"><label id="wizModelLabel">模型配置</label><div id="wizModelInfo" class="modelinfo" hidden></div><div class="codex-catalog-heading"><div class="codex-catalog-meta" id="wizCodexCatalogMeta">尚未探测模型。</div><button class="btn" id="wizFetchBtn" type="button">获取可用模型</button></div><div id="wizStaticCatalog" class="simple-model-editor"><div class="simple-model-grid"><label>默认模型（均衡）<input id="wizModel" list="wizModelList" autocomplete="off" spellcheck="false" /></label><label>高质量模型（可选）<input id="wizRoleQuality" list="wizModelList" placeholder="留空则使用默认模型" autocomplete="off" spellcheck="false" /></label><label>快速模型（可选）<input id="wizRoleFast" list="wizModelList" placeholder="留空则使用默认模型" autocomplete="off" spellcheck="false" /></label><label>Fable 模型（可选）<input id="wizRoleFable" list="wizModelList" placeholder="留空则使用高质量模型" autocomplete="off" spellcheck="false" /></label></div><datalist id="wizModelList"></datalist><div class="hint" id="wizCatalogWarning">可以选择推荐模型，也可以直接填写供应商或中转站提供的精确模型 ID。</div></div><div id="wizCodexCatalog" class="codex-catalog" hidden><div class="codex-catalog-list" id="wizCodexCatalogList"></div></div><div class="hint" id="wizModelHint"></div></div>
-                <div class="field" id="wizKeyGroup"><label for="wizKey">API Key / Token</label><input id="wizKey" type="password" placeholder="粘贴 key（只存本地）" autocomplete="off" spellcheck="false" /><div class="hint">只存本地；面板仅回显末 4 位。</div></div>
+                <div class="field"><label for="wizName">名称</label><input id="wizName" type="text" placeholder="例如：日常研究 · DeepSeek" autocomplete="off" spellcheck="false" /></div>
+                <div class="field" id="wizBaseGroup"><label for="wizBase">API 地址（Base URL）</label><input id="wizBase" type="text" placeholder="https://your-relay/claude" autocomplete="off" spellcheck="false" /><div class="hint" id="wizBaseHint"></div></div>
+                <div class="field catalog-field" id="wizModelGroup"><label id="wizModelLabel">模型配置</label><div id="wizModelInfo" class="modelinfo" hidden></div><div class="codex-catalog-heading"><div class="codex-catalog-meta" id="wizCodexCatalogMeta">尚未探测模型。</div><button class="btn" id="wizFetchBtn" type="button">获取可用模型</button></div><div id="wizStaticCatalog" class="simple-model-editor"><div class="simple-model-grid"><label>默认模型（均衡）<input id="wizModel" list="wizModelList" autocomplete="off" spellcheck="false" /></label><details class="model-advanced"><summary>按任务分配不同模型 <span>可选</span></summary><div class="role-grid"><label>高质量模型（可选）<input id="wizRoleQuality" list="wizModelList" placeholder="留空则使用默认模型" autocomplete="off" spellcheck="false" /></label><label>快速模型（可选）<input id="wizRoleFast" list="wizModelList" placeholder="留空则使用默认模型" autocomplete="off" spellcheck="false" /></label><label>Fable 模型（可选）<input id="wizRoleFable" list="wizModelList" placeholder="留空则使用高质量模型" autocomplete="off" spellcheck="false" /></label></div></details></div><datalist id="wizModelList"></datalist><div class="hint" id="wizCatalogWarning">可以选择推荐模型，也可以直接填写供应商或中转站提供的精确模型 ID。</div></div><div id="wizCodexCatalog" class="codex-catalog" hidden><div class="codex-catalog-list" id="wizCodexCatalogList"></div></div><div class="hint" id="wizModelHint"></div></div>
+                <div class="field" id="wizKeyGroup"><label for="wizKey">API Key</label><input id="wizKey" type="password" placeholder="粘贴 key（只存本地）" autocomplete="off" spellcheck="false" /><div class="hint">只存本地；面板仅回显末 4 位。</div></div>
               </div>
               <div class="form-actions"><button class="btn primary" id="wizSaveBtn">创建</button><button class="btn" id="wizCancelBtn">取消</button></div>
             </section>
@@ -141,9 +111,9 @@
             <section class="surface form-surface tp-only" id="connSec" hidden>
               <div class="section-heading compact"><h2 id="connTitle">编辑连接</h2></div>
               <div class="form-grid">
-                <div class="field" id="connBaseGroup"><label for="connBase">地址 base_url</label><input id="connBase" type="text" autocomplete="off" spellcheck="false" /><div class="hint" id="connBaseHint"></div></div>
-                <div class="field catalog-field" id="connModelGroup"><label id="connModelLabel">模型配置</label><div id="connModelInfo" class="modelinfo" hidden></div><div class="codex-catalog-heading"><div class="codex-catalog-meta" id="connCodexCatalogMeta">尚未探测模型。</div><button class="btn" id="connFetchBtn" type="button">获取可用模型</button></div><div id="connStaticCatalog" class="simple-model-editor"><div class="simple-model-grid"><label>默认模型（均衡）<input id="connModel" list="connModelList" autocomplete="off" spellcheck="false" /></label><label>高质量模型（可选）<input id="connRoleQuality" list="connModelList" placeholder="留空则使用默认模型" autocomplete="off" spellcheck="false" /></label><label>快速模型（可选）<input id="connRoleFast" list="connModelList" placeholder="留空则使用默认模型" autocomplete="off" spellcheck="false" /></label><label>Fable 模型（可选）<input id="connRoleFable" list="connModelList" placeholder="留空则使用高质量模型" autocomplete="off" spellcheck="false" /></label></div><datalist id="connModelList"></datalist><div class="hint" id="connCatalogWarning">可以选择推荐模型，也可以直接填写供应商或中转站提供的精确模型 ID。</div></div><div id="connCodexCatalog" class="codex-catalog" hidden><div class="codex-catalog-list" id="connCodexCatalogList"></div></div><div class="hint" id="connModelHint"></div></div>
-                <div class="field" id="connKeyGroup"><label for="connKey">API Key / Token</label><input id="connKey" type="password" autocomplete="off" spellcheck="false" /><div class="hint">留空＝不改；要移除请使用“清除 key”。</div></div>
+                <div class="field" id="connBaseGroup"><label for="connBase">API 地址（Base URL）</label><input id="connBase" type="text" autocomplete="off" spellcheck="false" /><div class="hint" id="connBaseHint"></div></div>
+                <div class="field catalog-field" id="connModelGroup"><label id="connModelLabel">模型配置</label><div id="connModelInfo" class="modelinfo" hidden></div><div class="codex-catalog-heading"><div class="codex-catalog-meta" id="connCodexCatalogMeta">尚未探测模型。</div><button class="btn" id="connFetchBtn" type="button">获取可用模型</button></div><div id="connStaticCatalog" class="simple-model-editor"><div class="simple-model-grid"><label>默认模型（均衡）<input id="connModel" list="connModelList" autocomplete="off" spellcheck="false" /></label><details class="model-advanced"><summary>按任务分配不同模型 <span>可选</span></summary><div class="role-grid"><label>高质量模型（可选）<input id="connRoleQuality" list="connModelList" placeholder="留空则使用默认模型" autocomplete="off" spellcheck="false" /></label><label>快速模型（可选）<input id="connRoleFast" list="connModelList" placeholder="留空则使用默认模型" autocomplete="off" spellcheck="false" /></label><label>Fable 模型（可选）<input id="connRoleFable" list="connModelList" placeholder="留空则使用高质量模型" autocomplete="off" spellcheck="false" /></label></div></details></div><datalist id="connModelList"></datalist><div class="hint" id="connCatalogWarning">可以选择推荐模型，也可以直接填写供应商或中转站提供的精确模型 ID。</div></div><div id="connCodexCatalog" class="codex-catalog" hidden><div class="codex-catalog-list" id="connCodexCatalogList"></div></div><div class="hint" id="connModelHint"></div></div>
+                <div class="field" id="connKeyGroup"><label for="connKey">API Key</label><input id="connKey" type="password" autocomplete="off" spellcheck="false" /><div class="hint">留空保留现有密钥；不会回显已保存的完整密钥。</div></div>
               </div>
               <div class="form-actions"><button class="btn primary" id="connSaveBtn">保存连接</button><button class="btn danger" id="connClearBtn">清除 key</button><button class="btn" id="connCancelBtn">取消</button></div>
             </section>
@@ -156,96 +126,26 @@
 
           </section>
 
-          <section class="app-page" data-page="skills" aria-label="Skill 与 MCP">
-            <section class="surface extension-page-intro" aria-labelledby="extensionPageTitle">
-              <div>
-                <div class="section-kicker">EXTENSIONS</div>
-                <h2 id="extensionPageTitle">Skill</h2>
-                <p>查看当前 Science 组织中已发现的 Skill，并在运行时可信时回读 OPERON 绑定状态。</p>
-              </div>
-              <div class="extension-actions">
-                <button class="btn" id="refreshSkillsBtn" type="button">刷新</button>
-                <button class="btn primary" id="importSkillBtn" type="button" disabled>导入本地 Skill 包</button>
-              </div>
-            </section>
-            <div id="skillPageRoot" class="skill-page-root">
-              <div class="skill-loading">正在载入 Skill 页面…</div>
-            </div>
-          </section>
-
-          <section class="app-page" data-page="status" aria-label="状态">
-            <div class="status-page-grid">
-              <section class="surface status-detail-card tp-only"><div class="section-kicker">PROXY</div><h2>本地代理</h2><p>负责把 Claude Science 请求路由到当前第三方模型。</p><div class="large-state"><i class="lt a" data-mirror-light="ltProxy"></i><span data-mirror-text="proxyStateText">检查中</span></div></section>
-              <section class="surface status-detail-card tp-only"><div class="section-kicker">SANDBOX</div><h2>隔离 Science</h2><p>运行在 CSSwitch 管理的独立 HOME 与数据目录中。</p><div class="large-state"><i class="lt a" data-mirror-light="ltSandbox"></i><span data-mirror-text="sandboxStateText">检查中</span></div></section>
-              <section class="surface status-detail-card tp-only"><div class="section-kicker">UPSTREAM</div><h2>模型上游</h2><p>仅代表当前代理探测到的连接健康状态。</p><div class="large-state"><i class="lt a" data-mirror-light="ltUpstream"></i><span data-mirror-text="upstreamStateText">检查中</span></div></section>
-            </div>
-            <section class="surface diagnostics-card">
-              <div class="section-heading"><div><div class="section-kicker">DIAGNOSTICS</div><h2>诊断与支持</h2><p>只读自检不会更改 Skill 或 MCP；“修复 Skill 路由”会显式同步 CSSwitch 管理的第三方 Skill 配置。两个动作都不会启动受管 Science 或正式 Gateway 服务。</p></div></div>
-              <div class="diagnostic-actions"><button class="btn" id="doctorBtn">运行只读自检</button><button class="btn" id="repairSkillRouteBtn">修复 Skill 路由</button><button class="btn" id="logsBtn">打开日志</button><button class="btn" id="updateBtn">检查更新</button><button class="btn" id="reportBtn">反馈 / 报 bug</button></div>
-            </section>
-          </section>
-
           <section class="app-page" data-page="settings" aria-label="设置">
             <details class="surface adv tp-only" id="advSec" open>
-              <summary><span><span class="section-kicker">RUNTIME</span><strong>运行设置</strong></span><span class="summary-hint">修改后按现有规则保存</span></summary>
+              <summary><span><span class="section-kicker">RUNTIME</span><strong>运行设置</strong></span><span class="summary-hint">保存后生效</span></summary>
               <div class="settings-grid">
-                <div class="field"><label for="proxyPort">代理端口</label><input id="proxyPort" inputmode="numeric" value="18991" /></div>
-                <div class="field"><label for="sandboxPort">沙箱端口</label><input id="sandboxPort" inputmode="numeric" value="8990" /></div>
+                <div class="field"><label for="proxyPort">本地网关端口</label><input id="proxyPort" inputmode="numeric" value="18991" /></div>
+                <div class="field"><label for="sandboxPort">Science 端口</label><input id="sandboxPort" inputmode="numeric" value="8990" /></div>
               </div>
               <div class="permission-card">
                 <label class="ssh-bridge-toggle" for="reuseSystemSsh"><input id="reuseSystemSsh" type="checkbox" /><span>允许隔离 Science 使用系统 SSH 配置</span></label>
-                <p>启用后，Science 调用系统 OpenSSH 时会读取你的 <code>~/.ssh/config</code>。CSSwitch 不复制整个 <code>.ssh</code>，也不启动 sshd 或开放端口。</p>
-                <p>这相当于授权该隔离 Science 实例使用已有 SSH 身份；更改后需要重新“一键开始”。</p>
+                <p>启用后，Science 调用系统 OpenSSH 时会读取你的 <code>~/.ssh/config</code>。研舟不复制整个 <code>.ssh</code>，也不启动 sshd 或开放端口。</p>
+                <p>这相当于授权该隔离 Science 实例使用已有 SSH 身份；更改后需要重新启动 Science。</p>
               </div>
+              <div class="form-actions"><button id="saveSettingsBtn" class="btn primary" type="button">保存设置</button><span class="hint">更改端口会停止当前服务，需要重新启动。</span></div>
             </details>
 
-            <section class="surface settings-section tp-only codex-experimental" aria-labelledby="codexSettingsTitle">
-              <div class="section-heading">
-                <div><div class="section-kicker">EXPERIMENTAL</div><h2 id="codexSettingsTitle">Codex 账号与连接</h2><p>登录身份、模型目录和网络路线只服务于 Codex 配置，不改变其他第三方模型。</p></div>
-                <span class="badge warn">实验 · 非官方</span>
-              </div>
-              <div class="permission-card codex-entry-card">
-                <label class="ssh-bridge-toggle" for="codexEnabled"><input id="codexEnabled" type="checkbox" /><span>启用 Codex 实验入口</span></label>
-                <p>CSSwitch 使用独立 OAuth 私有文件，不读取或修改 <code>~/.codex</code>、原生 Codex 登录或 macOS 钥匙串。关闭入口不会退出这里的 Codex 授权。</p>
-              </div>
-              <div class="codex-settings-grid">
-                <section class="codex-auth-box" aria-labelledby="codexAccountTitle">
-                  <h3 id="codexAccountTitle">账号</h3>
-                  <div class="codex-auth-status" id="codexAuthStatus" aria-live="polite">尚未检查 CSSwitch Codex 登录状态。</div>
-                  <div class="action-row codex-auth-actions">
-                    <button class="btn" id="codexStatusBtn">检查状态</button>
-                    <button class="btn primary" id="codexLoginBtn">浏览器登录 Codex</button>
-                    <button class="btn" id="codexCancelBtn" disabled>取消登录</button>
-                    <button class="btn" id="codexLogoutBtn" disabled>退出登录</button>
-                  </div>
-                  <div id="codexProfileRepairBox" hidden>
-                    <div class="hint">授权已安全保存，但 Codex 配置尚未创建，无需重新登录。</div>
-                    <div class="action-row codex-auth-actions"><button class="btn" id="codexRepairProfileBtn">补建 Codex 配置</button></div>
-                  </div>
-                </section>
-                <section class="codex-auth-box" aria-labelledby="codexNetworkTitle">
-                  <h3 id="codexNetworkTitle">网络路线</h3>
-                  <div class="codex-network-fields">
-                    <div class="field"><label for="codexNetworkMode">模式</label><select id="codexNetworkMode"><option value="auto">自动环境代理</option><option value="custom">显式代理 URL</option></select></div>
-                    <div class="field"><label for="codexProxyUrl">代理 URL</label><input id="codexProxyUrl" type="password" autocomplete="off" spellcheck="false" placeholder="socks5h://127.0.0.1:7890" disabled /></div>
-                  </div>
-                  <div class="hint" id="codexNetworkResolved">当前路线：直接 socket，可能由系统 TUN 接管。</div>
-                  <div class="hint">自动模式读取 HTTPS_PROXY / ALL_PROXY 并应用 NO_PROXY；显式模式支持 HTTP、HTTPS、SOCKS5 和 SOCKS5h。</div>
-                  <div class="action-row codex-auth-actions"><button class="btn" id="codexNetworkSaveBtn">保存网络路线</button></div>
-                </section>
-              </div>
-              <section class="codex-auth-box codex-maintenance" id="codexDowngradeBox" hidden>
-                <h3>兼容性维护</h3>
-                <div class="codex-auth-status">安装不支持 v3 的旧版前，可导出 Codex 配置的非敏感元数据并原子降级。CSSwitch 本地 OAuth 会保留，完成后应用立即退出。</div>
-                <div class="action-row codex-auth-actions"><button class="btn danger" id="codexDowngradeBtn">导出并降级到 v2</button></div>
-              </section>
-            </section>
-
-            <section class="surface official-only"><div class="empty-state"><h2>官方模式沿用 Claude Science 设置</h2><p>切换回第三方模式可调整 CSSwitch 代理与沙箱端口。</p></div></section>
+            <section class="surface settings-about"><div class="section-kicker">ABOUT SCIPORT</div><h2>轻装启程，专注研究。</h2><p>支持 Anthropic Messages、OpenAI Chat Completions 和 OpenAI Responses。使用你自己的 API，不在研舟中登录官方账号。</p><div class="about-grid"><div><strong>本地保存</strong><span>API Key 保存在本机配置文件中，权限为 0600；不是钥匙串加密存储。</span></div><div><strong>独立运行</strong><span>第三方 Science 使用独立目录，不替换你的官方应用或登录。</span></div></div><p class="about-compatibility">研舟 · SciPort · 本地 API 工作空间。应用标识与数据目录保持兼容，不迁移现有配置。</p></section>
           </section>
         </div>
 
-        <div class="feedback" hidden><div class="msg" id="msg" role="status" aria-live="polite"></div><div class="browser-fallback" id="browserFallback" hidden><input id="browserFallbackUrl" readonly aria-label="Science 地址" /><button class="btn" id="browserFallbackCopyBtn" type="button">复制 URL</button><button class="btn" id="browserFallbackRetryBtn" type="button">再次打开</button></div></div>
+        <section class="feedback" id="feedbackPanel" aria-label="操作反馈" hidden><div class="feedback-heading"><span>操作反馈</span><button class="btn feedback-close" id="feedbackCloseBtn" type="button" aria-label="关闭操作反馈" title="关闭（Esc）；不会取消后台任务"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg><span>关闭</span><kbd>Esc</kbd></button></div><div class="msg" id="msg" role="status" aria-live="polite" tabindex="0" aria-label="操作结果详情"></div><div class="browser-fallback" id="browserFallback" hidden><input id="browserFallbackUrl" readonly aria-label="Science 地址" /><button class="btn" id="browserFallbackCopyBtn" type="button">复制 URL</button><button class="btn" id="browserFallbackRetryBtn" type="button">再次打开</button></div></section>
       </main>
     </div>
   </body>

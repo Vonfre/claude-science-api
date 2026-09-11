@@ -57,6 +57,8 @@ Include "<真实 ~/.ssh/config 的绝对路径>"
 
 默认关闭时，SSH 不是普通 Science 启动的前置条件。用户启用该设置时，CSSwitch 先验证真实 `~/.ssh/config`；SSH 授权状态变化会先停止仍使用旧授权的隔离 Science，再保存新设置。关闭授权会撤销 CSSwitch 管理的隔离 config；若该位置是外来文件、symlink 或特殊文件，CSSwitch 会拒绝覆盖或删除并据实报错。
 
+兼容旧版 V1 入口：只有精确 CSSwitch V1 标记、指向当前系统 config 的精确 Include、当前用户拥有且为 `0600` 的单链接普通文件，才可进入启动事务。预检不修改文件；事务先保存 V1 before-image，现有启动脚本再生成 V2。运行态健康检查仍只接受当前 Host 列表对应的 V2，不把旧入口当作已就绪。若启动失败，只有本次事务已观察并仍能确认身份的 V2 candidate 才可恢复成原 V1；外来内容、链接、额外指令或身份变化均拒绝覆盖，无法确认归属时保留恢复状态而不宣称已回退。系统 config 和同目录其他 SSH 文件不属于此次迁移目标。恢复固定隔离 `.ssh` 目录句柄，先以不覆盖方式保留待替换对象并核验其身份，再以不覆盖方式发布 V1；并发出现的新文件不会被覆盖。被移走的对象保留在隔离目录的 `.csswitch-ssh-recovery-*` 文件中，归属异常时供人工检查，不自动删除。中断重放即使已看到 V1，也必须补做目录持久化，失败时不得清除恢复状态。
+
 启用后的每次启动都会再次校验 config 与 packaged wrapper。config 缺失、wrapper 缺失或路径不安全时，启动 fail closed 并清理部分启动，不能以 warning 略过。
 
 当前 packaged wrapper validator 检查：asset root/scripts/wrapper 目录链不是 symlink 且为目录；wrapper 本身不是 symlink、是普通文件、不超过 128 KiB，并至少有一个 executable bit。它当前不检查 wrapper 的精确内容/hash、owner、link count、group/world writable 或精确 mode，文档和验收不能把这些未实现检查写成已证明。只有 Science 已成功启动后的某次 SSH 命令失败，才只影响该命令。

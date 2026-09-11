@@ -18,7 +18,7 @@ pub(crate) const SAFE_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
 pub(crate) const SAFE_LANG: &str = "en_US.UTF-8";
 
 /// Host home used by the launch script for opt-in system SSH config paths.
-/// Never treated as Science HOME.
+/// Also used as the daemon HOME after explicit isolated config preparation.
 pub(crate) const HOST_HOME_ENV: &str = "CSSWITCH_HOST_HOME";
 
 /// Explicit isolated-live marker. The launch script validates that it is
@@ -80,7 +80,7 @@ fn default_tmpdir() -> String {
 
 /// Real user home that owns `~/.csswitch` (parent of config dir).
 /// Used only for host-side paths such as system SSH config resolution.
-/// Never used as Science sandbox HOME.
+/// The daemon uses this HOME; its auth/data paths are explicitly isolated.
 pub(crate) fn host_home_dir() -> PathBuf {
     config::default_dir()
         .parent()
@@ -99,6 +99,17 @@ pub(crate) fn absolute_host_home_dir() -> PathBuf {
     std::env::current_dir()
         .map(|cwd| cwd.join(&home))
         .unwrap_or(home)
+}
+
+/// Added only after the host adapter has prepared isolated auth/config paths.
+pub(crate) fn configure_science_host_home(
+    cmd: &mut Command,
+    config_hash: &str,
+    security_hash: &str,
+) {
+    cmd.env("CSSWITCH_SCIENCE_USE_HOST_HOME", "1")
+        .env("CSSWITCH_SCIENCE_CONFIG_SHA256", config_hash)
+        .env("CSSWITCH_SCIENCE_SECURITY_SHA256", security_hash);
 }
 
 /// Control-plane environment for `scripts/launch-virtual-sandbox.sh`.

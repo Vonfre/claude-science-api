@@ -1,0 +1,10 @@
+SciPort / claude-science-api
+
+This distribution includes code derived from CSSwitch:
+https://github.com/SuperJJ007/CSswitch
+Copyright (c) 2026 shanjunjie
+Upstream license: MIT (see LICENSE.upstream).
+
+The destination repository's Apache License 2.0 is retained in LICENSE.
+The upstream MIT notice is preserved and applies to the upstream code.
+No affiliation with or endorsement by Anthropic is implied.

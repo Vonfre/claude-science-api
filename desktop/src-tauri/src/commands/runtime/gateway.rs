@@ -25,6 +25,10 @@ pub(super) async fn fetch_models_command(
     lifecycle: State<'_, SharedLifecycle>,
     req: FetchModelsReq,
 ) -> Result<serde_json::Value, crate::commands::codex::RuntimeCommandError> {
+    crate::api_only::require_api_template(&req.template_id)?;
+    if let Some(id) = req.profile_id.as_deref() {
+        crate::api_only::require_api_profile(&config::default_dir(), Some(id))?;
+    }
     let lifecycle = lifecycle.inner().clone();
     run_blocking_typed(
         move || -> Result<_, crate::commands::codex::RuntimeCommandError> {

@@ -22,3 +22,17 @@ export function aggregateRuntimeStatus(status, { mode = "proxy", officialState =
   if (applicable.every((value) => value === "green")) return "green";
   return "amber";
 }
+
+// Upstream is a TCP reachability probe, not authenticated model health.
+export function runtimeStatusLabel(id, status) {
+  const light = normalizeRuntimeLight(status);
+  if (id === "upstreamStateText") {
+    return { green: "网络可达 · API 未验证", amber: "网络不可达", red: "需要处理",
+      gray: "不适用", unknown: "尚未确认" }[light];
+  }
+  if (["proxyStateText", "sandboxStateText"].includes(id)) {
+    return { green: "健康检查通过", amber: "未启动或未就绪", red: "需要处理",
+      gray: "不适用", unknown: "状态未知" }[light];
+  }
+  return RUNTIME_STATUS_LABELS[light];
+}

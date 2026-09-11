@@ -11,7 +11,7 @@ CSSwitch 是 Science 第三方模式的 **运行编排器和模型协议适配�
 CSSwitch 长期拥有的稳定合同只有：
 
 1. executable 选择、来源和 runtime identity；
-2. 隔离 HOME、持久 data-dir、端口与禁止真实数据目录的布局；
+2. 官方主目录浏览、独立 config/auth/data-dir、端口与禁止将真实账号作为第三方状态的布局；
 3. 隔离 data-dir 内的本地虚拟登录投影；
 4. loopback Gateway、path secret、provider launch plan 与 model protocol 兼容；
 5. launch receipt、listener、data-dir 和进程身份对齐；
@@ -37,8 +37,39 @@ Gateway 进程就把它们都解释成 model routing：
 - 非 HTTPS、显式 proxy bypass 或不读取 proxy environment 的 client 不能由上述
   合同推出；CSSwitch 不注入其凭证、不冒充 entitlement，也不能无说明地改变现有
   transport；
-- 真实 Claude OAuth/token、真实账号数据库、整个真实 HOME 和未经用户选择的外部
-  凭证不得投影进第三方沙箱。
+- 真实 Claude OAuth/token、真实账号数据库和未经用户选择的外部凭证不得复制或
+  投影成第三方身份；浏览主目录不等于把整棵主目录授予模型读写。
+
+### 本机 Home 浏览与独立状态
+
+经用户明确接受官方 Home 行为后，Desktop cold start / recovery 由
+`runtime/science/home_layout.rs::prepare_science_host_home` 准备隔离配置，再由
+`ScienceHostAdapter::spawn_launch` 启用 daemon 的真实 host `HOME`。Science 原生
+`host-home` / `host-browse` 因而可浏览本机主目录；读写授权仍归 Science，不添加
+全 HOME grant，不关闭生产 sandbox，也不改浏览器页面或另建文件选择器。
+
+配置 owner 只安全读取隔离 data-dir 的 `config.toml`，保留其他偏好，显式固定
+`data_dir`、`paths.auth_dir` 和 `paths.conda_home`；已有认证/Conda override 若指向
+其他位置则拒绝，不静默覆盖；内容未变但权限为只读时仍原子归一到 `0600`。
+原子写入后向 launch allowlist 传递配置摘要，脚本核对
+属主、权限、无符号链接和摘要，使用显式 `--config` / `--data-dir`，不加载真实 Home
+的默认 Science 配置来建立第三方身份。配置准备或身份校验失败时不启动 Science。
+
+同一 owner 在隔离 HOME 的 `.csswitch-science-tools/security` 写入固定私有 shim，
+以 `zsh -f` 禁止加载用户 shell 初始化文件，通过受核对的内容身份放入 Science PATH；
+只有该子命令恢复隔离 HOME，沿用旧
+CSSwitch 专属钥匙串，避免主目录切换使既有第三方登录不可解。CSSwitch 不读取或
+输出真实 Keychain / OAuth 内容。其他继承环境仍清空，provider secret 仍只到 Gateway。
+
+此模式不是“Science 永不接触真实 Home”：官方 executable 在加载指定配置前的
+历史目录检查/迁移，以及 HOME 派生的官方资源行为，按用户授权由 Science 自身
+执行；CSSwitch 不扫描、复制或自行迁移真实 Science 数据。原来已健康的 daemon
+不强制重启，需用户停止并重新启动后才使用新 Home。无 host-home 标志的手工脚本
+和 `--version` / `status` / `url` / stop 控制探针仍保持隔离 HOME，不扩大诊断权限。
+
+生产接线、配置保存/拒绝和参数防漂移分别由 `home_layout_tests`、
+`runtime::launch_env` 与 `test/test_launch_science_env_allowlist.sh` 做聚焦检查；
+这些检查不建立真实文件读写、provider 或当前运行实例的验证结果。
 
 凭证边界的 process environment 合同：Tauri → launch/stop script 与
 launch script → Science 均使用显式 allowlist（`runtime/launch_env.rs` +

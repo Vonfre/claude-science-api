@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -57,6 +58,17 @@ fn read_exact_v2_managed_stub(
     expected_system_config: &Path,
     expected_hosts: &[String],
 ) -> Result<Option<ManagedSshStubSnapshot>, String> {
+    read_managed_stub(sandbox_home, expected_system_config, expected_hosts, false)
+}
+
+// Only transaction admission/rollback may accept the exact legacy V1 entry.
+// Running health and candidate ownership must still prove the expected V2 hosts.
+fn read_managed_stub(
+    sandbox_home: &Path,
+    expected_system_config: &Path,
+    expected_hosts: &[String],
+    allow_legacy: bool,
+) -> Result<Option<ManagedSshStubSnapshot>, String> {
     let ssh_dir = sandbox_home.join(".ssh");
     let dir_metadata = match std::fs::symlink_metadata(&ssh_dir) {
         Ok(metadata) => metadata,
@@ -105,10 +117,19 @@ fn read_exact_v2_managed_stub(
             .iter()
             .all(|host| crate::runtime::ssh_bridge::is_concrete_alias(host))
         || !managed_ssh_stub_text(text, expected_system_config)
-        || lines.first().copied() != Some(SSH_STUB_MARKER_V2)
-        || lines.get(1).copied() != Some(expected_host_line.as_str())
+        || !((allow_legacy && lines.first().copied() == Some(SSH_STUB_MARKER))
+            || (lines.first().copied() == Some(SSH_STUB_MARKER_V2)
+                && lines.get(1).copied() == Some(expected_host_line.as_str())))
     {
         return Err("隔离 SSH config 不是当前操作的精确 CSSwitch V2 文件".into());
+    }
+    let named =
+        std::fs::symlink_metadata(&config).map_err(|_| "隔离 SSH config 状态无法安全确认")?;
+    if named.file_type().is_symlink()
+        || named.dev() != metadata.dev()
+        || named.ino() != metadata.ino()
+    {
+        return Err("隔离 SSH config 在检查期间发生变化".into());
     }
     Ok(Some(ManagedSshStubSnapshot {
         bytes,
@@ -117,17 +138,171 @@ fn read_exact_v2_managed_stub(
     }))
 }
 
+// Pin the directory for the whole recovery operation; never follow a replaced
+// .ssh symlink when publishing or retaining an object during compensation.
+fn ssh_recovery_dir(home: &Path) -> Result<std::fs::File, String> {
+    let dir = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(home.join(".ssh"))
+        .map_err(|_| "SSH 恢复目录无法安全打开")?;
+    let meta = dir.metadata().map_err(|_| "SSH 恢复目录无法核验")?;
+    // SAFETY: geteuid has no preconditions.
+    if meta.uid() != unsafe { libc::geteuid() } || meta.mode() & 0o022 != 0 {
+        return Err("SSH 恢复目录权限不安全".into());
+    }
+    Ok(dir)
+}
+
+fn ssh_recovery_open(
+    dir: &std::fs::File,
+    name: &str,
+    flags: i32,
+) -> Result<std::fs::File, std::io::Error> {
+    let name = std::ffi::CString::new(name).unwrap();
+    // SAFETY: directory fd is live, name is a NUL-terminated single component.
+    let fd = unsafe {
+        libc::openat(
+            dir.as_raw_fd(),
+            name.as_ptr(),
+            flags | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+            0o600,
+        )
+    };
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // SAFETY: openat returned a new owned descriptor.
+    Ok(unsafe { std::fs::File::from_raw_fd(fd) })
+}
+
+fn ssh_recovery_snapshot(
+    dir: &std::fs::File,
+    name: &str,
+) -> Result<Option<ManagedSshStubSnapshot>, String> {
+    let mut file = match ssh_recovery_open(dir, name, libc::O_RDONLY) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err("SSH 恢复对象无法安全核验，已保留供人工检查".into()),
+    };
+    let meta = file.metadata().map_err(|_| "SSH 恢复对象无法核验")?;
+    // SAFETY: geteuid has no preconditions.
+    if !meta.is_file()
+        || meta.uid() != unsafe { libc::geteuid() }
+        || meta.nlink() != 1
+        || meta.mode() & 0o7777 != 0o600
+        || meta.len() > 128 * 1024
+    {
+        return Err("SSH 恢复对象不安全，已保留供人工检查".into());
+    }
+    let mut bytes = Vec::new();
+    (&mut file)
+        .take(128 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "SSH 恢复对象无法读取")?;
+    Ok(Some(ManagedSshStubSnapshot {
+        bytes,
+        device: meta.dev(),
+        inode: meta.ino(),
+    }))
+}
+
+fn ssh_recovery_move(dir: &std::fs::File, from: &str, to: &str) -> Result<(), String> {
+    let from = std::ffi::CString::new(from).unwrap();
+    let to = std::ffi::CString::new(to).unwrap();
+    #[cfg(target_os = "macos")]
+    let result = {
+        extern "C" {
+            fn renameatx_np(
+                a: i32,
+                b: *const libc::c_char,
+                c: i32,
+                d: *const libc::c_char,
+                flags: u32,
+            ) -> i32;
+        }
+        // SAFETY: both names and the pinned directory fd remain live. EXCL
+        // forbids overwriting a concurrently published destination.
+        unsafe {
+            renameatx_np(
+                dir.as_raw_fd(),
+                from.as_ptr(),
+                dir.as_raw_fd(),
+                to.as_ptr(),
+                4,
+            )
+        }
+    };
+    #[cfg(target_os = "linux")]
+    let result = unsafe {
+        libc::renameat2(
+            dir.as_raw_fd(),
+            from.as_ptr(),
+            dir.as_raw_fd(),
+            to.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    };
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let result = -1;
+    if result == 0 {
+        Ok(())
+    } else {
+        Err("SSH 恢复入口发生竞争或无法提交；未覆盖现存文件".into())
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static SSH_RECOVERY_TEST_HOOK: std::cell::RefCell<Option<Box<dyn FnMut(&str) -> Result<(), String>>>> = std::cell::RefCell::new(None);
+}
+
+fn ssh_recovery_checkpoint(_phase: &str) -> Result<(), String> {
+    #[cfg(test)]
+    SSH_RECOVERY_TEST_HOOK.with(|hook| {
+        if let Some(hook) = hook.borrow_mut().as_mut() {
+            hook(_phase)
+        } else {
+            Ok(())
+        }
+    })?;
+    Ok(())
+}
+
+fn ssh_recovery_sync(dir: &std::fs::File) -> Result<(), String> {
+    ssh_recovery_checkpoint("sync")?;
+    dir.sync_all()
+        .map_err(|_| "旧版 SSH 入口恢复持久化未确认".into())
+}
+
+fn ssh_recovery_finish(
+    home: &Path,
+    dir: &std::fs::File,
+    before: &ManagedSshStubSnapshot,
+) -> Result<(), String> {
+    let named_dir = ssh_recovery_dir(home)?;
+    let expected = dir.metadata().map_err(|_| "SSH 恢复目录无法核验")?;
+    let named = named_dir.metadata().map_err(|_| "SSH 恢复目录无法核验")?;
+    if expected.dev() != named.dev() || expected.ino() != named.ino() {
+        return Err("SSH 恢复目录已变化，恢复状态未确认".into());
+    }
+    if !ssh_recovery_snapshot(dir, "config")?.is_some_and(|current| current.bytes == before.bytes) {
+        return Err("SSH 恢复入口已变化，恢复状态未确认".into());
+    }
+    ssh_recovery_open(dir, "config", libc::O_RDONLY)
+        .and_then(|file| file.sync_all())
+        .map_err(|_| "SSH 恢复文件持久化未确认")?;
+    ssh_recovery_sync(dir)
+}
+
 impl ManagedSshStubTransaction {
     pub(crate) fn capture(sandbox_home: &Path, expected_hosts: &[String]) -> Result<Self, String> {
         let expected_system_config = system_ssh_config_path()?;
-        let before = match read_exact_v2_managed_stub(
-            sandbox_home,
-            &expected_system_config,
-            expected_hosts,
-        )? {
-            Some(snapshot) => ManagedSshStubBefore::Present(snapshot),
-            None => ManagedSshStubBefore::Absent,
-        };
+        let before =
+            match read_managed_stub(sandbox_home, &expected_system_config, expected_hosts, true)? {
+                Some(snapshot) => ManagedSshStubBefore::Present(snapshot),
+                None => ManagedSshStubBefore::Absent,
+            };
         Ok(Self {
             before,
             candidate: None,
@@ -166,10 +341,29 @@ impl ManagedSshStubTransaction {
     }
 
     fn compensate_unfenced(&self, sandbox_home: &Path) -> Result<(), String> {
-        let current = read_exact_v2_managed_stub(
+        // A retained object is checked on every replay, including the already
+        // restored branch. Unknown objects never silently clear the journal.
+        if let Some(candidate) = &self.candidate {
+            if let ManagedSshStubBefore::Present(before) = &self.before {
+                if before.bytes.starts_with(SSH_STUB_MARKER.as_bytes()) {
+                    let dir = ssh_recovery_dir(sandbox_home)?;
+                    let retained = format!(
+                        ".csswitch-ssh-recovery-{}-{}",
+                        candidate.device, candidate.inode
+                    );
+                    if let Some(snapshot) = ssh_recovery_snapshot(&dir, &retained)? {
+                        if &snapshot != candidate {
+                            return Err("SSH 恢复对象归属变化，已保留供人工检查".into());
+                        }
+                    }
+                }
+            }
+        }
+        let current = read_managed_stub(
             sandbox_home,
             &self.expected_system_config,
             &self.expected_hosts,
+            true,
         );
         match &self.before {
             ManagedSshStubBefore::Absent => {
@@ -192,25 +386,80 @@ impl ManagedSshStubTransaction {
                 Ok(())
             }
             ManagedSshStubBefore::Present(before) => match current? {
-                Some(current) if current.bytes == before.bytes => Ok(()),
-                Some(_) => Err("隔离 SSH config 已发生外部变化，拒绝覆盖".into()),
+                Some(current) if current.bytes == before.bytes => {
+                    ssh_recovery_finish(sandbox_home, &ssh_recovery_dir(sandbox_home)?, before)
+                }
+                Some(current) => {
+                    // The launch script upgrades V1 to V2. Restore only the exact
+                    // V2 candidate observed by this transaction, never a foreign file.
+                    if self.candidate.as_ref() != Some(&current) {
+                        return Err("隔离 SSH config 已发生外部变化，拒绝覆盖".into());
+                    }
+                    self.restore_legacy_before(sandbox_home, before, &current)
+                }
                 None => {
-                    let config = sandbox_home.join(".ssh/config");
-                    let mut file = std::fs::OpenOptions::new()
-                        .write(true)
-                        .create_new(true)
-                        .mode(0o600)
-                        .open(&config)
-                        .map_err(|_| "隔离 SSH config 缺失且无法安全恢复")?;
+                    let dir = ssh_recovery_dir(sandbox_home)?;
+                    let mut file = ssh_recovery_open(
+                        &dir,
+                        "config",
+                        libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL,
+                    )
+                    .map_err(|_| "隔离 SSH config 缺失且无法安全恢复")?;
                     file.write_all(&before.bytes)
                         .and_then(|_| file.sync_all())
                         .map_err(|_| "隔离 SSH config 缺失且无法安全恢复")?;
-                    std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o600))
-                        .map_err(|_| "隔离 SSH config 恢复后无法收紧权限")?;
-                    Ok(())
+                    ssh_recovery_finish(sandbox_home, &dir, before)
                 }
             },
         }
+    }
+
+    fn restore_legacy_before(
+        &self,
+        sandbox_home: &Path,
+        before: &ManagedSshStubSnapshot,
+        candidate: &ManagedSshStubSnapshot,
+    ) -> Result<(), String> {
+        let text = std::str::from_utf8(&before.bytes).map_err(|_| "旧版 SSH 入口快照无效")?;
+        if text.lines().next() != Some(SSH_STUB_MARKER)
+            || !managed_ssh_stub_text(text, &self.expected_system_config)
+        {
+            return Err("隔离 SSH config 已发生外部变化，拒绝覆盖".into());
+        }
+        let dir = ssh_recovery_dir(sandbox_home)?;
+        let retained = format!(
+            ".csswitch-ssh-recovery-{}-{}",
+            candidate.device, candidate.inode
+        );
+        let temporary = format!(".csswitch-restore-{}", crate::config::new_id());
+        let mut file = ssh_recovery_open(
+            &dir,
+            &temporary,
+            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL,
+        )
+        .map_err(|_| "无法准备旧版 SSH 入口恢复文件")?;
+        file.write_all(&before.bytes)
+            .and_then(|_| file.sync_all())
+            .map_err(|_| "无法写入旧版 SSH 入口恢复文件")?;
+        if ssh_recovery_snapshot(&dir, "config")?.as_ref() != Some(candidate) {
+            return Err("隔离 SSH config 已发生外部变化，拒绝覆盖".into());
+        }
+        ssh_recovery_checkpoint("before_move")?;
+        // Keep the moved object, even after successful recovery. It can have
+        // been replaced/edited after our check; never unlink an unknown object.
+        ssh_recovery_move(&dir, "config", &retained)?;
+        ssh_recovery_sync(&dir)?;
+        if ssh_recovery_snapshot(&dir, &retained)?.as_ref() != Some(candidate) {
+            // Best effort restore the foreign object to its original name, but
+            // never overwrite a new config. Either location preserves it.
+            let _ = ssh_recovery_move(&dir, &retained, "config");
+            ssh_recovery_sync(&dir)?;
+            return Err("隔离 SSH config 在恢复时发生外部变化，原文件已保留".into());
+        }
+        ssh_recovery_checkpoint("before_publish")?;
+        ssh_recovery_move(&dir, &temporary, "config")?;
+        ssh_recovery_checkpoint("after_publish")?;
+        ssh_recovery_finish(sandbox_home, &dir, before)
     }
 
     pub(crate) fn compensate_durable_with_authority_bypass(
@@ -363,8 +612,9 @@ pub(crate) fn prevalidate_sandbox_ssh_stub(
         }
         let expected_host_line = format!("Host {}", expected_hosts.join(" "));
         let lines = text.lines().collect::<Vec<_>>();
-        if lines.first().copied() != Some(SSH_STUB_MARKER_V2)
-            || lines.get(1).copied() != Some(expected_host_line.as_str())
+        if lines.first().copied() != Some(SSH_STUB_MARKER)
+            && (lines.first().copied() != Some(SSH_STUB_MARKER_V2)
+                || lines.get(1).copied() != Some(expected_host_line.as_str()))
         {
             return Err("隔离 SSH config 不是 CSSwitch 管理的安全入口".into());
         }
@@ -790,6 +1040,146 @@ mod tests {
             .is_ok());
         assert!(config.is_file(), "the proof check must not mutate the stub");
         let _ = std::fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn legacy_ssh_admission_and_rollback_preserve_foreign_files() {
+        let home =
+            std::env::temp_dir().join(format!("csswitch-v1-stub-{}", crate::config::new_id()));
+        let dir = home.join(".ssh");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let config = dir.join("config");
+        let expected = home.join("system/.ssh/config");
+        let hosts = vec!["alpha".to_string()];
+        let legacy = format!("{SSH_STUB_MARKER}\nInclude \"{}\"\n", expected.display());
+        let current = format!(
+            "{SSH_STUB_MARKER_V2}\nHost alpha\nInclude \"{}\"\n",
+            expected.display()
+        );
+        let write = |text: &str| {
+            std::fs::write(&config, text).unwrap();
+            std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o600)).unwrap();
+        };
+        write(&legacy);
+        assert!(super::read_exact_v2_managed_stub(&home, &expected, &hosts).is_err());
+        let before = super::read_managed_stub(&home, &expected, &hosts, true)
+            .unwrap()
+            .unwrap();
+        let mut tx = ManagedSshStubTransaction {
+            before: ManagedSshStubBefore::Present(before),
+            candidate: None,
+            expected_system_config: expected.clone(),
+            expected_hosts: hosts.clone(),
+        };
+        // No launch mutation: compensation must be an idempotent no-op.
+        tx.compensate_unfenced(&home).unwrap();
+        write(&current);
+        tx.observe_after_launch(&home);
+        let durable: ManagedSshStubTransaction =
+            serde_json::from_str(&serde_json::to_string(&tx).unwrap()).unwrap();
+        durable.compensate_unfenced(&home).unwrap();
+        assert_eq!(std::fs::read(&config).unwrap(), legacy.as_bytes());
+        durable.compensate_unfenced(&home).unwrap();
+        write(&current);
+        tx.observe_after_launch(&home);
+        // Replacing the file with identical bytes still loses candidate ownership.
+        std::fs::rename(&config, dir.join("previous-candidate")).unwrap();
+        write(&current);
+        assert!(tx.compensate_unfenced(&home).is_err());
+        assert_eq!(std::fs::read(&config).unwrap(), current.as_bytes());
+        for foreign in [
+            "Host private\n",
+            &format!("{legacy}ProxyCommand false\n"),
+            &legacy.replace("system/.ssh/config", "foreign/.ssh/config"),
+        ] {
+            write(foreign);
+            assert!(super::read_managed_stub(&home, &expected, &hosts, true).is_err());
+            assert!(tx.compensate_unfenced(&home).is_err());
+            assert_eq!(std::fs::read(&config).unwrap(), foreign.as_bytes());
+        }
+        std::fs::remove_file(&config).unwrap();
+        std::os::unix::fs::symlink(dir.join("previous-candidate"), &config).unwrap();
+        assert!(super::read_managed_stub(&home, &expected, &hosts, true).is_err());
+        std::fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn legacy_ssh_recovery_races_and_interrupted_sync() {
+        for phase in ["before_move", "before_publish", "after_publish"] {
+            let home =
+                std::env::temp_dir().join(format!("csswitch-v1-race-{}", crate::config::new_id()));
+            let dir = home.join(".ssh");
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+            let config = dir.join("config");
+            let expected = home.join("system/.ssh/config");
+            let hosts = vec!["alpha".to_string()];
+            let legacy = format!("{SSH_STUB_MARKER}\nInclude \"{}\"\n", expected.display());
+            let v2 = format!(
+                "{SSH_STUB_MARKER_V2}\nHost alpha\nInclude \"{}\"\n",
+                expected.display()
+            );
+            std::fs::write(&config, &legacy).unwrap();
+            std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o600)).unwrap();
+            let before = super::read_managed_stub(&home, &expected, &hosts, true)
+                .unwrap()
+                .unwrap();
+            let mut tx = ManagedSshStubTransaction {
+                before: ManagedSshStubBefore::Present(before),
+                candidate: None,
+                expected_system_config: expected,
+                expected_hosts: hosts,
+            };
+            std::fs::write(&config, &v2).unwrap();
+            tx.observe_after_launch(&home);
+            let target = config.clone();
+            super::SSH_RECOVERY_TEST_HOOK.with(|hook| {
+                *hook.borrow_mut() = Some(Box::new(move |point| {
+                    if point != phase {
+                        return Ok(());
+                    }
+                    if phase == "after_publish" {
+                        return Err("injected interruption before directory sync".into());
+                    }
+                    let foreign = target.with_file_name("incoming-foreign");
+                    std::fs::write(&foreign, b"foreign preserved\n").unwrap();
+                    std::fs::set_permissions(&foreign, std::fs::Permissions::from_mode(0o600))
+                        .unwrap();
+                    std::fs::rename(&foreign, &target).unwrap();
+                    Ok(())
+                }))
+            });
+            let result = tx.compensate_unfenced(&home);
+            super::SSH_RECOVERY_TEST_HOOK.with(|hook| *hook.borrow_mut() = None);
+            assert!(result.is_err(), "{phase} must not claim recovery success");
+            let replay: ManagedSshStubTransaction =
+                serde_json::from_str(&serde_json::to_string(&tx).unwrap()).unwrap();
+            if phase == "after_publish" {
+                assert_eq!(std::fs::read(&config).unwrap(), legacy.as_bytes());
+                super::SSH_RECOVERY_TEST_HOOK.with(|hook| {
+                    *hook.borrow_mut() = Some(Box::new(|point| {
+                        if point == "sync" {
+                            Err("injected directory sync failure".into())
+                        } else {
+                            Ok(())
+                        }
+                    }))
+                });
+                let failed_sync = replay.compensate_unfenced(&home);
+                super::SSH_RECOVERY_TEST_HOOK.with(|hook| *hook.borrow_mut() = None);
+                assert!(
+                    failed_sync.is_err(),
+                    "replay must not bypass directory durability"
+                );
+                replay.compensate_unfenced(&home).unwrap();
+            } else {
+                assert_eq!(std::fs::read(&config).unwrap(), b"foreign preserved\n");
+                assert!(replay.compensate_unfenced(&home).is_err());
+                assert_eq!(std::fs::read(&config).unwrap(), b"foreign preserved\n");
+            }
+            std::fs::remove_dir_all(home).unwrap();
+        }
     }
 
     #[test]

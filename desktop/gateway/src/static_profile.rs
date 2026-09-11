@@ -571,7 +571,7 @@ mod tests {
             .unwrap();
         resolver.routes[default_index].display_name = "default".into();
         let response = resolver.models_response();
-        assert_eq!(response["data"][0]["display_name"], "qwen-plus");
+        assert_eq!(response["data"][0]["display_name"], "Qwen Plus");
     }
 
     #[test]
@@ -589,6 +589,76 @@ mod tests {
             "claude-csswitch-qwen-plus-111111111111"
         );
         assert_eq!(response["data"][0]["display_name"], "Claude Sonnet 5");
+    }
+
+    #[test]
+    fn astra_luna_sol_catalog_survives_science_name_filter_without_changing_routes() {
+        let models = ["gpt-6-astra", "gpt-5.6-luna", "gpt-5.6-sol"];
+        let selectors = models.map(|model| format!("claude-csswitch-relay-{model}"));
+        let mut value = json!({
+            "schema_version": 1,
+            "adapter": "relay",
+            "catalog_fp": "0".repeat(64),
+            "default_selector_id": selectors[0],
+            "routes": models.iter().zip(&selectors).map(|(model, selector)| json!({
+                "selector_id": selector,
+                "display_name": model,
+                "upstream_model": model,
+                "supports_tools": null,
+            })).collect::<Vec<_>>(),
+            "role_bindings": {
+                "sonnet": selectors[0], "opus": selectors[0],
+                "haiku": selectors[1], "fable": selectors[2],
+            },
+            "legacy_aliases": [],
+        });
+        let wire: WireCatalog = serde_json::from_value(value.clone()).unwrap();
+        value["catalog_fp"] = json!(wire_catalog_fingerprint(&wire));
+        let resolver = StaticProfileResolver::from_json(&value.to_string()).unwrap();
+        let fingerprint = resolver.catalog_fp.clone();
+        let response = resolver.models_response();
+        let data = response["data"].as_array().unwrap();
+        // Science's model-list handler rejects these lowercase slug display names,
+        // independently of its separate requirement for a claude- selector prefix.
+        let hidden_slug = regex::Regex::new(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$").unwrap();
+        assert!(data.iter().all(|row| {
+            row["id"].as_str().unwrap().starts_with("claude-")
+                && !hidden_slug.is_match(row["display_name"].as_str().unwrap())
+        }));
+        assert_eq!(response["first_id"], selectors[0]);
+        for ((selector, upstream), display) in
+            selectors
+                .iter()
+                .zip(models)
+                .zip(["GPT 6 Astra", "gpt-5.6-luna", "gpt-5.6-sol"])
+        {
+            let row = data.iter().find(|row| row["id"] == *selector).unwrap();
+            assert_eq!(row["display_name"], display);
+            assert_eq!(
+                resolver.resolve(selector).unwrap().upstream_model(),
+                upstream
+            );
+        }
+        for (selector, upstream, display) in [
+            ("claude-sonnet-5", models[0], "GPT 6 Astra"),
+            ("claude-opus-5", models[0], "GPT 6 Astra"),
+            ("claude-sonnet-4-6", models[0], "GPT 6 Astra"),
+            ("claude-opus-4-8", models[0], "GPT 6 Astra"),
+            ("claude-haiku-4-5-20251001", models[1], models[1]),
+        ] {
+            let row = data.iter().find(|row| row["id"] == selector).unwrap();
+            assert_eq!(row["display_name"], display);
+            assert_eq!(
+                resolver.resolve(selector).unwrap().upstream_model(),
+                upstream
+            );
+        }
+        assert_eq!(
+            resolver.resolve("claude-fable-5").unwrap().upstream_model(),
+            models[2]
+        );
+        assert_eq!(resolver.catalog_fp, fingerprint);
+        assert_eq!(resolver.routes[0].display_name, models[0]);
     }
 
     #[test]

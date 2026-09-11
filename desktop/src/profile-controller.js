@@ -1,3 +1,5 @@
+import { visibleProfiles, reconcileSelection, runProfileBatch } from "./profile-batch.js";
+import { runtimeCommandErrorText } from "./runtime-error.js";
 import { call } from "./ipc-client.js";
 import { PROFILE_INTERACTIVE_PREVIEW } from "./preview-adapter.js";
 import {
@@ -35,9 +37,11 @@ export function createProfileController({
   startSaveConnectionFeedback,
   startSwitchModeFeedback,
   startPortSaveFeedback,
-  codex: codexController,
   runtime,
 }) {
+  let selectedIds = new Set();
+  let batchMode = false;
+  let pendingBatch = null;
   let wizardCatalog = [];
   let connectionCatalog = [];
   let wizardDiscoveredCatalog = [];
@@ -114,49 +118,39 @@ function updateModelIcon(image, profile) {
   image.dataset.modelFamily = meta.key;
 }
 
+function rowActionIcon(kind) {
+  const paths = {
+    select: '<path d="m5 12 4 4L19 6"/>',
+    edit: '<path d="m16 3 5 5-12 12-6 1 1-6L16 3Z"/><path d="m13 6 5 5"/>',
+    more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[kind]}</svg>`;
+}
+
 function modelIconMarkup(profile) {
   const meta = modelFamilyMeta(profile);
   return `<img class="model-family-icon profile-model-icon" src="${meta.src}" alt="" aria-hidden="true" title="${escapeHtml(meta.label)}" data-model-family="${meta.key}" />`;
 }
 
 function renderCurrentSummary() {
-  if (!els.currentProfileName) return;
-  if (getMode() === "official") {
-    updateModelIcon(els.currentProfileIcon, { template_id: "anthropic" });
-    els.currentProfileName.textContent = "官方 Claude";
-    els.currentProfileState.textContent = "官方模式";
-    els.currentProfileState.className = "state-pill neutral";
-    els.currentRouteMode.textContent = "由 Science 管理";
-    els.currentProfileModel.textContent = "Claude Science";
-    els.currentProfileMeta.textContent = "订阅与登录由 Claude Science 管理";
-    return;
+  const state = getConfigState();
+  const profile = (state.profiles || []).find(p => p.id === state.active_id);
+  const pending = !!profile && (state.selection_pending || state.active_id !== state.applied_profile_id);
+  const summary = {
+    launchProfileName: profile?.name || "尚未选择 API",
+    launchModelName: profile ? (profile.model || "模型尚未设置") : "先添加一个模型连接",
+    launchSelectionState: !profile ? "选择后，点击启动" : pending ? "待应用 · 下次启动生效" : "上次已应用 · 不代表服务运行中",
+  };
+  for (const [id, text] of Object.entries(summary)) {
+    const node = document.getElementById(id);
+    if (node) { node.textContent = text; node.title = text; }
   }
-  const profile = (getConfigState().profiles || []).find((item) => item.id === getConfigState().active_id);
-  els.currentRouteMode.textContent = "CSSwitch 代理";
-  if (!profile) {
-    updateModelIcon(els.currentProfileIcon, {});
-    els.currentProfileName.textContent = "尚未选择配置";
-    els.currentProfileState.textContent = "等待选择";
-    els.currentProfileState.className = "state-pill neutral";
-    els.currentProfileModel.textContent = "未配置";
-    els.currentProfileMeta.textContent = "从下方选择配置方案";
-    return;
-  }
-  const hasKey = typeof profile.has_key === "boolean" ? profile.has_key : !!profile.key;
-  updateModelIcon(els.currentProfileIcon, profile);
-  els.currentProfileName.textContent = profile.name || "未命名配置";
-  const codexDisabled = isCodexSource(profile) && !getConfigState().experimental_codex_enabled;
-  const pending = getConfigState().selection_pending || getConfigState().active_id !== getConfigState().applied_profile_id;
-  els.currentProfileState.textContent = codexDisabled
-    ? "入口已关闭"
-    : pending
-    ? "当前选择 · 待一键开始应用"
-    : "当前选择 · 上次应用";
-  els.currentProfileState.className = "state-pill neutral";
-  els.currentProfileModel.textContent = modelSummary(profile);
-  els.currentProfileMeta.textContent = isCodexSource(profile)
-    ? "CSSwitch OAuth · 账号动态模型目录"
-    : (profile.base_url || (hasKey ? "Key 已保存" : "未填写端点"));
+  const hint = document.getElementById("profileSelectionHint");
+  if (!hint) return;
+  hint.textContent = !profile ? "选择一条 API 后，再启动 Claude Science。"
+    : state.selection_pending || state.active_id !== state.applied_profile_id
+    ? `已选择「${profile.name}」，启动后应用。`
+    : `当前使用「${profile.name}」配置；运行情况以上方检查为准。`;
 }
 
 // ── 模型能力（纯函数，无 DOM）：native 映射 / relay 跟随 / relay 固定 / 账号动态目录。──
@@ -288,6 +282,7 @@ function profileName(id) {
 
 function syncProfileBusyState() {
   if (!els.profileList) return;
+  syncBatchControls();
   els.profileList.querySelectorAll(".prow").forEach((row) => {
     const rowId = row.getAttribute("data-id");
     const isTarget = !!(
@@ -300,7 +295,8 @@ function syncProfileBusyState() {
       const permanentlyDisabled = btn.dataset.permanentlyDisabled === "true";
       btn.disabled = permanentlyDisabled || isBusy() || (isActivationInFlight() && act === "activate");
       if (act === "activate") {
-        btn.textContent = isTarget ? "已提交" : "设为当前";
+        btn.classList.toggle("is-saving", isTarget);
+        btn.setAttribute("aria-busy", String(isTarget));
       }
     });
   });
@@ -315,8 +311,8 @@ async function loadConfig(options) {
   const opts = options || {};
   try {
     const cfg = await call("get_config");
-    getConfigState().profiles = cfg.profiles || [];
-    getConfigState().templates = cfg.templates || [];
+    getConfigState().profiles = (cfg.profiles || []).filter((p) => !isCodexSource(p));
+    getConfigState().templates = (cfg.templates || []).filter((p) => !isCodexSource(p));
     getConfigState().active_id = cfg.active_id || "";
     getConfigState().applied_profile_id = cfg.applied_profile_id || null;
     getConfigState().selection_pending = !!cfg.selection_pending;
@@ -329,9 +325,6 @@ async function loadConfig(options) {
     els.proxyPort.value = getConfigState().proxy_port;
     els.sandboxPort.value = getConfigState().sandbox_port;
     els.reuseSystemSsh.checked = getConfigState().reuse_system_ssh;
-    codexController.refreshCodexProfileRepairState();
-    codexController.renderCodexAuthState();
-    codexController.renderCodexNetwork();
     applyMode(cfg.mode === "official" ? "official" : "proxy");
     renderList();
     showView("list");
@@ -397,7 +390,7 @@ function profileModelControl(p) {
   if (!PROFILE_INTERACTIVE_PREVIEW) {
     const count = Number.isFinite(p.model_count) ? p.model_count : (p.model_catalog || []).length;
     const primary = modelSummary(p);
-    const details = count ? `${count} 个可用模型` : "动态目录";
+    const details = count ? `${count} 个可用模型` : "手动指定模型";
     return `<strong class="profile-model-text" title="${escapeHtml(primary)}">${escapeHtml(primary)}</strong><span class="profile-model-meta">${escapeHtml(details)}</span>`;
   }
   const options = profileModelOptions(p);
@@ -406,50 +399,140 @@ function profileModelControl(p) {
   </select>`;
 }
 
+function filteredProfiles() {
+  return visibleProfiles(getConfigState().profiles || [], document.getElementById("profileSearch")?.value || "");
+}
+
+function syncBatchControls() {
+  const locked = isBusy() || isActivationInFlight();
+  const visible = filteredProfiles();
+  const selectedVisible = visible.filter(p => selectedIds.has(p.id)).length;
+  document.getElementById("listSec")?.classList.toggle("batch-mode", batchMode);
+  const toggle = document.getElementById("batchManageBtn");
+  if (toggle) {
+    toggle.textContent = batchMode ? "退出批量管理" : "批量管理";
+    toggle.setAttribute("aria-pressed", String(batchMode));
+    toggle.disabled = locked;
+  }
+  els.profileList.querySelectorAll("[data-select-profile]").forEach(input => { input.disabled = locked; });
+  const bar = document.getElementById("batchToolbar");
+  if (bar) bar.hidden = !batchMode;
+  const count = document.getElementById("batchCount");
+  if (count) count.textContent = !selectedIds.size ? "请逐项勾选需要管理的 API" : `已选 ${selectedIds.size} 项` + (selectedIds.size > selectedVisible ? `（${selectedIds.size - selectedVisible} 项在搜索结果之外）` : "");
+  for (const id of ["batchClearSelection", "batchClearKeys", "batchDelete", "batchConfirm", "batchCancel"]) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = locked || (["batchClearSelection", "batchClearKeys", "batchDelete"].includes(id) && !selectedIds.size);
+  }
+  syncBatchConfirmation();
+}
+
 function renderList() {
   const list = els.profileList;
-  const ps = getConfigState().profiles || [];
+  const allProfiles = getConfigState().profiles || [];
+  selectedIds = reconcileSelection(selectedIds, allProfiles);
+  const ps = filteredProfiles();
+  const count = document.getElementById("profileCount");
+  if (count) count.textContent = allProfiles.length;
   renderCurrentSummary();
-  if (!ps.length) {
-    list.innerHTML = '<div class="empty">还没有配置。使用“新建配置”添加一条第三方来源。</div>';
-    return;
-  }
-  const header = `<div class="profile-list-head" aria-hidden="true"><span>配置</span><span>模型 / 目录</span><span>凭据</span><span>操作</span></div>`;
-  list.innerHTML = header + ps.map((p) => {
+  list.innerHTML = ps.length ? ps.map(p => {
     const active = p.id === getConfigState().active_id;
-    const codex = isCodexSource(p);
-    const codexEnabled = !!getConfigState().experimental_codex_enabled;
+    const applied = p.id === getConfigState().applied_profile_id;
+    const pending = active && (getConfigState().selection_pending || !applied);
+    const selectionLabel = active ? (pending ? "待应用 · 启动后生效" : "上次已应用") : applied ? "上次应用" : "";
     const hasKey = typeof p.has_key === "boolean" ? p.has_key : !!p.key;
-    const credential = codex ? "CSSwitch OAuth" : (hasKey ? escapeHtml(p.key_masked || p.key || "已保存") : "未填写");
-    const editAction = codex
-      ? '<button class="abtn" data-act="editconn" data-permanently-disabled="true" disabled aria-disabled="true" title="Codex 配置由 OAuth 与 Science 管理，无需编辑连接">编辑</button>'
-      : '<button class="abtn" data-act="editconn">编辑</button>';
-    return (
-      '<div class="prow' + (active ? " pactive" : "") + '" data-id="' + escapeHtml(p.id) + '">' +
-        '<div class="profile-identity">' +
-          '<div class="prow-top">' +
-            modelIconMarkup(p) +
-            '<span class="pname">' + escapeHtml(p.name) + "</span>" +
-            (active ? '<span class="badge on">当前选择</span>' : "") +
-            (p.id === getConfigState().applied_profile_id ? '<span class="badge">上次应用</span>' : "") +
-            (codex && !codexEnabled ? '<span class="badge warn">入口已关闭</span>' : "") +
-          "</div>" +
-        "</div>" +
-        '<div class="profile-model-cell">' + profileModelControl(p) + "</div>" +
-        '<div class="profile-key-cell"><strong>' + credential + "</strong></div>" +
-        '<div class="prow-acts">' +
-          (active || (codex && !codexEnabled) ? "" : '<button class="abtn prim" data-act="activate">设为当前</button>') +
-          editAction +
-          '<details class="profile-more"><summary>更多</summary><div class="profile-menu">' +
-            '<button class="abtn" data-act="editmeta">名称与备注</button>' +
-            (codex ? "" : '<button class="abtn" data-act="clearkey">清除 Key</button>') +
-            '<button class="abtn danger" data-act="delete">删除配置</button>' +
-          "</div></details>" +
-        "</div>" +
-      "</div>"
-    );
-  }).join("");
+    // Never fall back to a raw key in a list cell.
+    const credential = hasKey ? "••••••••" : "未填写";
+    return `<tr class="prow${active ? " pactive" : ""}${selectedIds.has(p.id) ? " pselected" : ""}" data-id="${escapeHtml(p.id)}"${active ? ' aria-current="true"' : ""}>
+      <td class="selection-cell"><input type="checkbox" data-select-profile="${escapeHtml(p.id)}" aria-label="选择 ${escapeHtml(p.name)}" ${selectedIds.has(p.id) ? "checked" : ""}></td>
+      <td class="profile-identity"><div class="prow-top">${modelIconMarkup(p)}<div class="profile-name-wrap"><span class="pname" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>${selectionLabel ? '<span class="badge ' + (active ? "on" : "") + '">' + selectionLabel + '</span>' : '<span class="profile-model-meta">'+escapeHtml(tplById(p.template_id)?.name || p.template_id || "自定义 API")+'</span>'}</div></div></td>
+      <td class="profile-model-cell">${profileModelControl(p)}</td>
+      <td class="profile-key-cell"><span class="key-state${hasKey ? "" : " missing"}">${credential}</span></td>
+      <td><div class="prow-acts">
+        <button class="icon-btn select-api${active ? " is-current" : ""}" data-act="activate" aria-pressed="${active}" aria-label="${escapeHtml(p.name)}：${active ? "当前选择" : "设为当前"}" title="${active ? "当前选择" : "设为当前（启动后应用）"}">${rowActionIcon("select")}</button>
+        <button class="icon-btn" data-act="editconn" aria-label="编辑 ${escapeHtml(p.name)}" title="编辑连接">${rowActionIcon("edit")}</button>
+        <details class="profile-more"><summary class="icon-btn" aria-label="${escapeHtml(p.name)} 的更多操作" title="更多操作">${rowActionIcon("more")}</summary><div class="profile-menu"><button class="abtn" data-act="editmeta">名称与备注</button><button class="abtn" data-act="clearkey">清除密钥</button><button class="abtn danger" data-act="delete">删除配置</button></div></details>
+      </div></td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="5"><div class="empty"><strong>${allProfiles.length ? "没有找到匹配的 API" : "从你的第一个 API 开始"}</strong><p>${allProfiles.length ? "试试其他名称或模型，或清空搜索。" : "点击「添加 API」，连接你常用的模型服务。"}</p></div></td></tr>`;
   syncProfileBusyState();
+}
+
+function toggleBatchMode() {
+  if (isBusy() || isActivationInFlight()) return;
+  batchMode = !batchMode;
+  selectedIds.clear();
+  renderList();
+}
+
+function changeSelection(id, checked) {
+  if (!batchMode || isBusy() || isActivationInFlight()) return;
+  if (!(getConfigState().profiles || []).some(p => p.id === id)) return;
+  checked ? selectedIds.add(id) : selectedIds.delete(id);
+  renderList();
+}
+
+function clearSelection() {
+  if (isBusy() || isActivationInFlight()) return;
+  selectedIds.clear();
+  renderList();
+}
+
+function requestBatch(action) {
+  if (!batchMode || isBusy() || isActivationInFlight() || !selectedIds.size) return;
+  const items = (getConfigState().profiles || []).filter(p => selectedIds.has(p.id)).map(p => ({ id: p.id, name: p.name }));
+  if (!items.length) return;
+  pendingBatch = { action, items };
+  document.getElementById("batchDialogTitle").textContent = `${action === "delete" ? "删除" : "清除密钥"} ${items.length} 个 API 配置？`;
+  document.getElementById("batchDialogNames").replaceChildren(...items.map(p => {
+    const li = document.createElement("li"); li.textContent = p.name; return li;
+  }));
+  const affected = items.some(p => [getConfigState().active_id, getConfigState().applied_profile_id].includes(p.id));
+  document.getElementById("batchDialogWarning").textContent = (action === "delete" ? "配置将被删除，无法撤销。" : "密钥将被清除，需要重新填写才能使用；其他配置字段保留。")
+    + (affected ? " 包含当前选择或上次应用的配置；涉及运行绑定时会停止代理服务。" : "")
+    + " 操作逐项执行，遇到失败会停止，已完成的项目不会回滚。";
+  document.getElementById("batchConfirm").textContent = action === "delete" ? "确认删除" : "确认清除密钥";
+  document.getElementById("batchDeleteChallenge").hidden = action !== "delete";
+  document.getElementById("batchDeletePhrase").value = "";
+  document.getElementById("batchDeletePhraseLabel").textContent = `请输入「删除 ${items.length} 项」以确认（无法撤销）`;
+  syncBatchConfirmation();
+  document.getElementById("batchDialog").showModal();
+}
+
+function syncBatchConfirmation() {
+  const button = document.getElementById("batchConfirm");
+  if (!button) return;
+  button.disabled = !pendingBatch || isBusy() || isActivationInFlight()
+    || (pendingBatch.action === "delete" && document.getElementById("batchDeletePhrase").value.trim() !== `删除 ${pendingBatch.items.length} 项`);
+}
+
+function cancelBatch() {
+  if (isBusy()) return;
+  pendingBatch = null;
+  document.getElementById("batchDialog").close();
+}
+
+async function confirmBatch() {
+  if (!pendingBatch || isBusy() || isActivationInFlight()) return;
+  if (pendingBatch.action === "delete" && document.getElementById("batchDeletePhrase").value.trim() !== `删除 ${pendingBatch.items.length} 项`) return;
+  const { action, items } = pendingBatch;
+  pendingBatch = null;
+  setBusy(true);
+  syncBatchControls();
+  document.getElementById("batchDialog").close();
+  setMsg(`正在逐项${action === "delete" ? "删除配置" : "清除密钥"}，共 ${items.length} 项…`);
+  try {
+    const result = await runProfileBatch(items, action, call);
+    result.completed.forEach(id => selectedIds.delete(id));
+    const refreshed = await loadConfig();
+    const message = result.failed
+      ? `已确认完成 ${result.completed.length}/${items.length} 项；「${result.failed.name}」未确认完成，已停止，后续 ${result.remaining} 项未执行。请核对状态后再操作。原因：${mutationErrorText(result.error)}`
+      : `已${action === "delete" ? "删除" : "清除密钥"} ${result.completed.length} 项。`;
+    setMsg(message + (refreshed ? "" : " 配置刷新失败，请重新打开应用核对结果。"), result.failed || !refreshed ? "err" : "ok");
+  } finally {
+    setBusy(false);
+    syncBatchControls();
+    await runtime.refreshStatus();
+  }
 }
 
 // ── 模式（第三方 / 官方）──
@@ -457,12 +540,12 @@ function applyMode(m) {
   const nextMode = m === "official" ? "official" : "proxy";
   if (nextMode !== getMode() && nextMode === "official") setOfficialRuntimeState("gray");
   setMode(nextMode);
-  els.panel.classList.toggle("mode-official", getMode() === "official");
-  els.modeSeg.querySelectorAll(".seg-btn").forEach((b) =>
+  els.panel.classList.remove("mode-official");
+  els.modeSeg?.querySelectorAll(".seg-btn").forEach((b) =>
     b.classList.toggle("active", b.dataset.mode === getMode())
   );
   els.oneClickBtn.textContent =
-    getMode() === "official" ? "打开官方 Claude Science" : "一键开始";
+    "启动 Claude Science ↗";
   renderCurrentSummary();
 }
 
@@ -507,7 +590,7 @@ function isExactActiveProfileIntent(raw, outcome, selectedProfileId) {
 
 async function switchMode(m) {
   if (m === getMode()) return;
-  if (isBusy()) return; // 忙碌中不切模式（防与「一键开始」竞态；按钮亦已禁用，此为双保险）。修 P1-b
+  if (isBusy()) return; // 忙碌中不切模式（防与「启动 Science」竞态；按钮亦已禁用，此为双保险）。修 P1-b
   getSkillPage()?.invalidate();
   setBusy(true, { kind: "switchMode", id: m });
   startSwitchModeFeedback(m);
@@ -537,41 +620,34 @@ async function switchMode(m) {
   setMsg(
     getMode() === "official"
       ? "已切到官方模式：第三方代理/沙箱已停，点上方按钮打开你真实的 Claude Science。"
-      : "已切到第三方模式：选一条配置「设为当前」后点「一键开始」。"
+      : "已切到第三方模式：选一条配置「设为当前」后点「启动 Science」。"
   );
   await runtime.refreshStatus();
   await getSkillPage()?.refreshIfLoaded();
 }
 
-async function openOfficial() {
-  setBusy(true);
-  setMsg("正在打开官方 Claude Science…");
-  try {
-    await call("open_official");
-    setOfficialRuntimeState("gray");
-    els.brandDot.className = "dot gray";
-    setMsg("已发起打开官方 Claude Science；运行、登录与订阅状态由 Science 管理。", "ok");
-  } catch (e) {
-    setOfficialRuntimeState("gray");
-    els.brandDot.className = "dot gray";
-    setMsg("打开失败：" + e, "err");
-  } finally {
-    setBusy(false);
-  }
-}
-
 // hero 按钮按当前模式分派。
 async function heroClick() {
-  if (getMode() === "official") await openOfficial();
-  else await runtime.oneClick();
+  if (!(getConfigState().profiles || []).some((p) => p.id === getConfigState().active_id)) {
+    // The backend replays interrupted local recovery before rejecting a missing API.
+    await runtime.oneClick();
+    return;
+  }
+  // Legacy official mode is switched only after an explicit user launch, never on read.
+  if (getMode() === "official") await switchMode("proxy");
+  if (getMode() === "proxy") await runtime.oneClick();
 }
 
 // ── 运行设置（端口 + 系统 SSH 配置授权；不含 provider/连接）──
 async function persistRuntimeSettings() {
   if (isBusy()) return; // 忙碌中不改端口（防与在途操作竞态；输入亦已禁用，此为双保险）。修 P1-c
   getSkillPage()?.invalidate();
-  const p = parseInt(els.proxyPort.value, 10) || 18991;
-  const s = parseInt(els.sandboxPort.value, 10) || 8990;
+  const values = [els.proxyPort.value.trim(), els.sandboxPort.value.trim()];
+  if (values.some((v) => !/^\d+$/.test(v) || Number(v) < 1024 || Number(v) > 65535 || Number(v) === 8765) || Number(values[0]) === Number(values[1])) {
+    setMsg("请填写 1024–65535 之间不同的端口；8765 保留给官方 Science。", "err");
+    return;
+  }
+  const [p, s] = values.map(Number);
   const reuseSystemSsh = !!els.reuseSystemSsh.checked;
   const portsChanged = p !== getConfigState().proxy_port || s !== getConfigState().sandbox_port;
   const sshChanged = reuseSystemSsh !== getConfigState().reuse_system_ssh;
@@ -602,8 +678,8 @@ async function persistRuntimeSettings() {
     // 后端在端口变化时会拆掉旧代理/沙箱（否则会复用指向旧端口的死链路），如实告知需重开。修 P1-c
     if (changed) {
       setMsg(sshChanged
-        ? "SSH 授权设置已保存。正在运行的代理/沙箱已重置，请重新「一键开始」。"
-        : "端口已保存。改端口会重置正在运行的代理/沙箱，请重新「一键开始」。", "ok");
+        ? "SSH 授权设置已保存。正在运行的代理/沙箱已重置，请重新「启动 Science」。"
+        : "端口已保存。改端口会重置正在运行的代理/沙箱，请重新「启动 Science」。", "ok");
       await runtime.refreshStatus();
       await getSkillPage()?.refreshIfLoaded();
     } else {
@@ -835,7 +911,7 @@ function onWizTemplate() {
   const codex = isCodexSource(t);
   els.wizName.value = t.name;
   // 把「新建不自动生效」放进顶部常驻提示（默认窗口下反馈区首屏可能在折叠线下，见 #6）。
-  els.wizTplHint.textContent = sourceHint(t) + " 新建后先设为当前选择，再点「一键开始」应用。";
+  els.wizTplHint.textContent = sourceHint(t) + " 新建后先设为当前选择，再点「启动 Science」应用。";
   els.wizBaseGroup.hidden = codex;
   els.wizKeyGroup.hidden = codex;
   els.wizCodexCatalog.hidden = !codex;
@@ -911,7 +987,7 @@ async function wizFetch() {
     if (codex) renderCodexCatalog(els.wizCodexCatalogMeta, els.wizCodexCatalogList, r);
     else renderStaticCatalogDiscovery("wizard", r);
   } catch (e) {
-    setMsg("获取模型失败：" + codexController.runtimeCommandErrorText(e), "err");
+    setMsg("获取模型失败：" + runtimeCommandErrorText(e), "err");
   } finally {
     setBusy(false);
     refreshWizGate();
@@ -948,8 +1024,8 @@ async function wizSave() {
     els.wizKey.value = "";
     await loadConfigAfterCommit();
     setMsg(codex
-      ? "已创建「" + name + "」。先设为当前；一键开始后请在 Science 的 More models 选择 Codex / …。"
-      : "已创建「" + name + "」。请设为当前选择，再点「一键开始」应用。", "ok");
+      ? "已创建「" + name + "」。先设为当前；启动 Science后请在 Science 的 More models 选择 Codex / …。"
+      : "已创建「" + name + "」。请设为当前选择，再点「启动 Science」应用。", "ok");
   } catch (e) {
     setMsg(e && e.configCommitted ? committedRefreshMessage("创建配置", e) : "创建失败：" + e, "err");
   } finally {
@@ -1023,7 +1099,7 @@ function openConn(id) {
   setMsg(codex
     ? "这里只读取 CSSwitch OAuth 账号模型；不会在配置中固定模型。启动后请在 Science 的 More models 选择。"
     : (selected
-      ? "编辑当前选择：保存只更新候选连接；当前运行链保持不变，下次一键开始时核验并应用。"
+      ? "编辑当前选择：保存只更新候选连接；当前运行链保持不变，下次启动 Science时核验并应用。"
       : "编辑连接后点「保存连接」。"));
 }
 
@@ -1058,7 +1134,7 @@ async function connFetch() {
     if (codex) renderCodexCatalog(els.connCodexCatalogMeta, els.connCodexCatalogList, r);
     else renderStaticCatalogDiscovery("connection", r);
   } catch (e) {
-    setMsg("获取模型失败：" + codexController.runtimeCommandErrorText(e), "err");
+    setMsg("获取模型失败：" + runtimeCommandErrorText(e), "err");
   } finally {
     setBusy(false);
     refreshConnGate();
@@ -1105,18 +1181,18 @@ async function connSave() {
       const recovery = r.recovery_status === "degraded" ? "；恢复也未完全成功，请先全部停止后检查" : r.recovery_status === "restored" ? "；旧配置已恢复" : "";
       setMsg((r.message || "连接未应用") + recovery + "（阶段：" + (r.stage || "unknown") + "）", "err");
     } else if (selected) {
-      setMsg((r && (r.message || r.hint)) || "已保存连接；当前运行链保持不变，下次一键开始时应用。", "ok");
+      setMsg((r && (r.message || r.hint)) || "已保存连接；当前运行链保持不变，下次启动 Science时应用。", "ok");
     } else if (r && r.validated) {
       setMsg("已保存连接（已通过上游校验）。", "ok");
     } else {
-      setMsg("已保存连接（未能连通上游校验；下次一键开始时会再验并应用）。", "ok");
+      setMsg("已保存连接（未能连通上游校验；下次启动 Science时会再验并应用）。", "ok");
     }
   } catch (e) {
     // 后端错误文案已如实说明回滚/代理状态（可能是「已回滚到原配置」或「回滚未成功：代理当前已停」），
     // 前端不再盲目追加「仍在用原配置运行」，避免与「代理已停」相互矛盾。修 GPT 三轮 P2
     setMsg(e && e.configCommitted
       ? committedRefreshMessage("连接配置", e)
-      : "连接未保存：" + codexController.runtimeCommandErrorText(e), "err");
+      : "连接未保存：" + runtimeCommandErrorText(e), "err");
   } finally {
     setBusy(false);
     await runtime.refreshStatus();
@@ -1152,11 +1228,11 @@ async function doClearKey(id) {
     await loadConfigAfterCommit();
     setMsg(
       appliedMutation
-        ? "已清除 key（该配置属于上次提交的运行绑定，代理已停止；请重新填写并一键开始）。"
+        ? "已清除 key（该配置属于上次提交的运行绑定，代理已停止；请重新填写并启动 Science）。"
         : outcome.disposition === "no_change"
         ? "配置已不存在，无需清除 key。"
         : wasSelected
-        ? "已清除当前选择的 key；当前运行链保持不变，重新填写后再一键开始。"
+        ? "已清除当前选择的 key；当前运行链保持不变，重新填写后再启动 Science。"
         : "已清除 key。",
       "ok"
     );
@@ -1239,8 +1315,9 @@ async function doDelete(id) {
   }
 }
 
-// 设为当前只保存选择；真正 apply/start 的唯一边界是一键开始。
+// 设为当前只保存选择；真正 apply/start 的唯一边界是启动 Science。
 async function activate(id) {
+  if (id === getConfigState().active_id) return;
   if (isActivationInFlight()) {
     setMsg("当前选择仍在保存。请稍后再提交另一条配置。");
     return;
@@ -1266,16 +1343,16 @@ async function activate(id) {
     const selectionMessage = r.apply_state === "applied"
       ? "当前选择已是上次应用配置。"
       : intent.disposition === "no_change"
-        ? "当前选择未变；仍待一键开始核验并应用。"
-        : "已设为当前选择，待一键开始核验并应用。";
+        ? "当前选择未变；仍待启动 Science核验并应用。"
+        : "已设为当前选择，待启动 Science核验并应用。";
     setMsg(selectionMessage + (codex
-      ? " 一键开始后，请在 Science 的 More models 中选择 Codex / …；默认 Claude 壳不会被静默映射。"
+      ? " 启动 Science后，请在 Science 的 More models 中选择 Codex / …；默认 Claude 壳不会被静默映射。"
       : ""), "ok");
   } catch (e) {
     if (!(e && e.configCommitted)) await loadConfig();
     setMsg(e && e.configCommitted
       ? committedRefreshMessage("当前选择", e)
-      : "设为当前失败：" + codexController.runtimeCommandErrorText(e), "err");
+      : "设为当前失败：" + runtimeCommandErrorText(e), "err");
   } finally {
     setActivationInFlight(false);
     await runtime.refreshStatus();
@@ -1290,6 +1367,13 @@ async function activate(id) {
     refreshConnGate,
     loadConfig,
     renderList,
+    toggleBatchMode,
+    syncBatchConfirmation,
+    changeSelection,
+    clearSelection,
+    requestBatch,
+    cancelBatch,
+    confirmBatch,
     switchMode,
     heroClick,
     persistRuntimeSettings,

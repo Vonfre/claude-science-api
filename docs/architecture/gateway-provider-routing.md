@@ -80,6 +80,13 @@ reviewer 或后续 tool-result 请求；Gateway 用 static model resolver 固定
 Science 没有 executor 的同名 client tool。标题、reviewer、environment/kernel 失败也不能
 反向写成主模型请求失败。
 
+Science-facing 模型目录的 `display_name` 由 `desktop/gateway/src/models.rs` 统一处理，
+静态 exact selector 与官方 role alias 共用这一展示边界。Science 会过滤符合
+`^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$` 的小写连字符显示名，因此这类标签需转为可读名称
+（例如 `gpt-6-astra` → `GPT 6 Astra`）；不命中过滤条件的既有标签保持不变，既有
+Claude raw-ID 美化规则仍保留。此转换不修改保存的配置、selector、目录指纹或实际
+upstream model，也不通过变更启动环境或角色绑定修复展示问题。
+
 Kimi 的 Anthropic-compatible 路由采用以下窄兼容：
 
 - 保留 Kimi 实际支持的 `web_search_*` 声明，以及响应中的 `server_tool_use` /
