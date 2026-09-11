@@ -10972,3 +10972,59 @@ fn p2b_boot_dual_receipt_conflict_fails_closed() {
     assert_eq!(attention.unwrap()["cause"], "p2a_p2b_mutual_exclusion");
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn app_update_after_stop_is_fail_closed_and_retains_terminal_lease() {
+    for stop_ok in [false, true] {
+        let state: SharedAppState = Arc::new(Mutex::new(AppState::default()));
+        let lifecycle = Arc::new(lifecycle::Lifecycle::new());
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let installed = AtomicBool::new(false);
+        let result = super::lifecycle::stop_all_then_with(
+            app.handle().clone(),
+            state.clone(),
+            lifecycle.clone(),
+            lifecycle::RuntimeMutationDomain::Terminal,
+            |runtime| Ok(science::ScienceStopRequest::recover(runtime)),
+            |_, _| {
+                if stop_ok {
+                    (
+                        Ok(science::VerifiedScienceStop {
+                            runtime: None,
+                            ownership_was_proven: true,
+                        }),
+                        true,
+                    )
+                } else {
+                    (
+                        Err(science::ScienceStopFailure::stop_command_failed(
+                            "fixture stop failed".to_string(),
+                        )),
+                        false,
+                    )
+                }
+            },
+            || {
+                assert!(
+                    state.try_lock().is_ok(),
+                    "installer must not retain read-model lock"
+                );
+                assert!(
+                    lifecycle
+                        .try_acquire_mutation(lifecycle::RuntimeMutationDomain::Destructive)
+                        .is_none(),
+                    "the installer must retain the terminal mutation lease"
+                );
+                installed.store(true, Ordering::SeqCst);
+                Err("fixture installation failed; restart must not follow".into())
+            },
+        );
+        assert!(result.is_err());
+        assert_eq!(installed.load(Ordering::SeqCst), stop_ok);
+        assert!(lifecycle
+            .try_acquire_mutation(lifecycle::RuntimeMutationDomain::Destructive)
+            .is_some());
+    }
+}

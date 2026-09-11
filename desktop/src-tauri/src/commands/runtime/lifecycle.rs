@@ -1146,6 +1146,40 @@ where
         crate::runtime::science::ScienceStopRequest,
     ) -> (crate::runtime::science::ScienceStopOutcome, bool),
 {
+    stop_all_then_with(
+        app,
+        state,
+        lifecycle,
+        domain,
+        claim_science,
+        execute_science,
+        || Ok(()),
+    )
+}
+
+pub(super) fn stop_all_then_with<R, Claim, Execute, After>(
+    app: tauri::AppHandle<R>,
+    state: SharedAppState,
+    lifecycle: SharedLifecycle,
+    domain: RuntimeMutationDomain,
+    claim_science: Claim,
+    execute_science: Execute,
+    after_stop: After,
+) -> Result<(), String>
+where
+    R: tauri::Runtime,
+    After: FnOnce() -> Result<(), String>,
+    Claim: FnOnce(
+        Option<&crate::runtime::science::ScienceRuntimeIdentity>,
+    ) -> Result<
+        crate::runtime::science::ScienceStopRequest,
+        crate::runtime::science::ScienceStopFailure,
+    >,
+    Execute: FnOnce(
+        &tauri::AppHandle<R>,
+        crate::runtime::science::ScienceStopRequest,
+    ) -> (crate::runtime::science::ScienceStopOutcome, bool),
+{
     lifecycle.with_mutation(domain, |_| {
         let generation = lifecycle.bump_generation(); // 作废任何在途启动（防被停后又拿旧 key 复活）
         let (owner, request) = claim_process_local_science_stop(&state, generation, claim_science);
@@ -1174,7 +1208,9 @@ where
             ) => Err(format!(
                 "Gateway child 停止结果未确认且 Science 停止失败；应用仍保留 process-local cleanup owner：{reason}；{error}"
             )),
-        }
+        }?;
+        drop(st);
+        after_stop()
     })
 }
 

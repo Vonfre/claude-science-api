@@ -88,7 +88,7 @@
                   <strong id="batchCount" aria-live="polite">请逐项勾选需要管理的 API</strong><button class="abtn" id="batchClearSelection">取消选择</button><div class="batch-actions"><button class="btn" id="batchClearKeys">清除密钥</button><button class="btn danger" id="batchDelete">删除所选</button></div>
                 </div>
                 <div class="profile-table-wrap"><table class="profile-table" aria-label="我的 API 配置"><colgroup><col class="check-col"><col class="name-col"><col class="model-col"><col class="key-col"><col class="actions-col"></colgroup><thead><tr><th class="selection-cell" scope="col"><span class="selection-heading">勾选</span></th><th scope="col">连接名称</th><th scope="col">默认模型</th><th scope="col">密钥</th><th scope="col" class="actions-heading">操作</th></tr></thead><tbody id="profileList" class="profile-list"></tbody></table></div>
-                <dialog id="batchDialog" class="batch-dialog" aria-labelledby="batchDialogTitle" aria-describedby="batchDialogWarning"><div class="section-kicker">BATCH MANAGEMENT</div><h2 id="batchDialogTitle"></h2><p id="batchDialogWarning"></p><ul id="batchDialogNames"></ul><div id="batchDeleteChallenge" hidden><label id="batchDeletePhraseLabel" for="batchDeletePhrase"></label><input id="batchDeletePhrase" autocomplete="off" spellcheck="false" placeholder="输入确认文字" /></div><div class="dialog-actions"><button class="btn" id="batchCancel" autofocus>取消</button><button class="btn danger" id="batchConfirm">确认</button></div></dialog><div class="connection-footnote"><span aria-hidden="true">◇</span> 密钥仅存本机 · 选择连接不会打断当前会话，启动后才应用。</div>
+                <dialog id="batchDialog" class="batch-dialog" aria-labelledby="batchDialogTitle" aria-describedby="batchDialogWarning"><div class="section-kicker">BATCH MANAGEMENT</div><h2 id="batchDialogTitle"></h2><p id="batchDialogWarning"></p><ul id="batchDialogNames"></ul><div id="batchDeleteChallenge" hidden><label id="batchDeletePhraseLabel" for="batchDeletePhrase"></label><input id="batchDeletePhrase" autocomplete="off" spellcheck="false" placeholder="输入确认文字" /></div><div class="dialog-actions"><button class="btn" id="batchCancel" autofocus>取消</button><button class="btn danger" id="batchConfirm">确认</button></div></dialog><div class="connection-footnote"><button id="directoryAccessBtn" class="btn" type="button">工作目录权限</button><button id="appUpdateNotice" class="btn" type="button" hidden></button></div><div class="connection-footnote"><span aria-hidden="true">◇</span> 密钥仅存本机 · 选择连接不会打断当前会话，启动后才应用。</div>
               </section>
               <aside class="service-boundary" aria-label="官方连接器说明"><span class="boundary-icon" aria-hidden="true">i</span><div><strong>模型连接 ≠ 官方账号登录</strong><p>研舟接入第三方模型，不提供 claude.ai 登录。官方连接器仍需要有效的官方账号会话；模型可用不代表连接器已授权。</p></div><span class="boundary-tag">能力说明 · 非登录检测</span></aside>
             </div>
@@ -134,8 +134,8 @@
                 <div class="field"><label for="sandboxPort">Science 端口</label><input id="sandboxPort" inputmode="numeric" value="8990" /></div>
               </div>
               <div class="permission-card">
-                <label class="ssh-bridge-toggle" for="allowScienceHostHome"><input id="allowScienceHostHome" type="checkbox" /><span>我同意 Science 使用本机真实主目录</span></label>
-                <p>默认关闭，使用隔离 HOME。启用后，Science 可提供本机主目录浏览；官方程序也可能在加载独立配置前检查或迁移真实主目录中的历史 Science 数据。</p>
+                <label class="ssh-bridge-toggle" for="allowScienceHostHome"><input id="allowScienceHostHome" type="checkbox" /><span>允许选择本机主目录内的工作文件夹（需授权）</span></label>
+                <p>遇到 “Directory is not under $HOME or a granted root” 时，请启用此项、保存并重新启动 Science。默认使用隔离 HOME；启用后可在 Science 中选择本机主目录下的工作文件夹。官方程序也可能在加载独立配置前检查或迁移真实主目录中的历史 Science 数据。</p>
                 <p>独立 data/auth 目录不等于绝不访问真实主目录。研舟不复制官方凭证，也不授予整个主目录读写权限；具体读写仍由 Science 确认。勾选并保存即表示接受上述行为。</p>
                 <p>启用或撤销会停止当前服务，需重新启动；撤销不会回滚 Science 已执行的操作。</p>
               </div>
@@ -147,11 +147,19 @@
               <div class="form-actions"><button id="saveSettingsBtn" class="btn primary" type="button">保存设置</button><span class="hint">更改端口会停止当前服务，需要重新启动。</span></div>
             </details>
 
+            <section class="surface settings-about" aria-labelledby="appUpdateTitle"><div class="section-kicker">APP UPDATES</div><h2 id="appUpdateTitle">研舟应用更新</h2><p>启动时及每 6 小时自动检查 GitHub 稳定版。仅在你确认后下载、校验签名、安装并重启；不更新官方 Claude Science。</p><p id="appUpdateStatus" role="status" aria-live="polite">尚未检查</p><div class="form-actions"><button id="checkAppUpdateBtn" class="btn" type="button">检查更新</button><button id="installAppUpdateBtn" class="btn primary" type="button" hidden>下载并更新</button></div></section>
             <section class="surface settings-about"><div class="section-kicker">ABOUT SCIPORT</div><h2>轻装启程，专注研究。</h2><p>支持 Anthropic Messages、OpenAI Chat Completions 和 OpenAI Responses。使用你自己的 API，不在研舟中登录官方账号。</p><div class="about-grid"><div><strong>本地保存</strong><span>API Key 保存在本机配置文件中，权限为 0600；不是钥匙串加密存储。</span></div><div><strong>独立运行</strong><span>第三方 Science 使用独立目录，不替换你的官方应用或登录。</span></div></div><p class="about-compatibility">研舟 · SciPort · 本地 API 工作空间。应用标识与数据目录保持兼容，不迁移现有配置。</p></section>
           </section>
         </div>
 
         <section class="feedback" id="feedbackPanel" aria-label="操作反馈" hidden><div class="feedback-heading"><span>操作反馈</span><button class="btn feedback-close" id="feedbackCloseBtn" type="button" aria-label="关闭操作反馈" title="关闭（Esc）；不会取消后台任务"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg><span>关闭</span><kbd>Esc</kbd></button></div><div class="msg" id="msg" role="status" aria-live="polite" tabindex="0" aria-label="操作结果详情"></div><div class="browser-fallback" id="browserFallback" hidden><input id="browserFallbackUrl" readonly aria-label="Science 地址" /><button class="btn" id="browserFallbackCopyBtn" type="button">复制 URL</button><button class="btn" id="browserFallbackRetryBtn" type="button">再次打开</button></div></section>
+        <dialog id="directoryAccessDialog" class="batch-dialog" aria-labelledby="directoryAccessTitle">
+          <form method="dialog"><div class="section-kicker">WORKING DIRECTORY</div><h2 id="directoryAccessTitle">选择 Science 的目录访问方式</h2>
+          <p>隔离模式下，本机文件夹可能提示 “Directory is not under $HOME or a granted root”。允许本机主目录后，可在 Science 的目录选择器中选择其中的工作文件夹；主目录外的位置仍需 Science 另行授权。</p>
+          <p>授权后 Science 使用真实 HOME，但 data/auth/config 仍独立。官方程序可能检查或迁移主目录中的历史 Science 数据；这不代表将整个主目录授予模型读写，也不修复官方账号登录。权限可在设置中撤销。</p>
+          <p>保存授权会停止当前服务，随后按本次选择重新启动。</p><div class="dialog-actions"><button class="btn" value="cancel" autofocus>取消</button><button class="btn" value="isolated">本次使用隔离模式</button><button class="btn primary" value="host">同意并使用本机目录</button></div></form>
+        </dialog>
+        <dialog id="appUpdateDialog" class="batch-dialog" aria-labelledby="appUpdateDialogTitle"><form method="dialog"><h2 id="appUpdateDialogTitle">安装研舟更新？</h2><p>请先保存 Science 中的工作。下载和签名校验完成后，研舟会停止自己管理的服务、替换应用并重启；不会修改配置或更新官方 Science。失败时会保留错误提示，不会自动重试安装。</p><div class="dialog-actions"><button class="btn" value="cancel" autofocus>暂不更新</button><button class="btn primary" value="install">下载并更新</button></div></form></dialog>
       </main>
     </div>
   </body>

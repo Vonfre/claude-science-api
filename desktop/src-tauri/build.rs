@@ -99,6 +99,7 @@ fn copy_executable(src: &Path, dst: &Path) {
 }
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=SCIPORT_UPDATER_PUBLIC_KEY");
     stage_gateway_sidecar();
     tauri_build::build()
 }

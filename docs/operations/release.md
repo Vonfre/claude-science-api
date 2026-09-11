@@ -104,3 +104,37 @@ DMG 必须从一次性创建的空 staging 目录生成，只复制本次 clean 
 - 刷新 `.agents/context/current-release.md`、verified-state 与 known-issues；
 - 再检查所有 worktree，确认没有误改用户工作区；
 - commit、push、tag、release 和清理分支分别报告，不合并授权。
+
+
+## SciPort 应用内更新
+
+Owner：`commands/app_update.rs` 持有检查串行状态及内存候选；
+`app-update-controller.js` 在面板启动及每 6 小时检查一次，也提供手动检查。
+公开输入只允许“检查”和用户确认的精确候选版本，不接收 URL、公钥或包路径。
+GitHub 稳定版 `latest.json` 是发现入口；下载仅接受本仓库版本化 Apple Silicon
+附件，Tauri updater 必须以构建时固定公钥验签。检查/下载失败不停止服务；验签成功
+后 `runtime::install_verified_app_update` 在同一 Terminal lifecycle lease 中完成
+已有 stop ownership 检查和应用替换。安装先 claim 非阻塞退出协调状态；安装期间原生退出被拒绝，避免提权安装等待主线程时发生锁环。释放安装状态和 lifecycle lease 后才 request_restart；退出已开始时拒绝安装。停止失败不安装，安装失败不
+请求重启。安装使用 Tauri 平台安装器，目录权限不足时可能请求系统管理员授权；
+不承诺断电原子性或自动回滚。错误对 UI 脱敏，不记录下载响应或本机路径。
+这是研舟自身的更新，不改变 Science 的 active/pending 或其 `--no-auto-update` 合同。
+
+首次启用的维护者操作：
+
+1. 在自己的安全环境使用 Tauri signer 生成并备份一对长期更新签名密钥。
+   不把私钥提交仓库，不把密钥内容发给 Agent。不要每次发布重新生成密钥。
+2. 在 GitHub 仓库变量设置 `SCIPORT_UPDATER_PUBLIC_KEY`（Tauri 公钥文件内容），
+   在仓库 Secrets 设置 `TAURI_SIGNING_PRIVATE_KEY` 和对应的
+   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。公开变量去除前后空白后用于客户端验签，与 CI 校验器保持一致。插件初始化使用空公钥配置占位；仅 Rust 更新命令能覆盖为编译期固定公钥。
+3. `release.yml` 先构建，再执行原 DMG codesign/package，最后执行
+   `package-sciport-updater.sh`。后者打包最终 `.app`、签名、验证公私钥配对，
+   生成 `darwin-aarch64` 的 `latest.json`，并将归档、签名、清单加入 SHA256SUMS。
+   DMG 与 updater 使用同一最终签名 bundle；缺失公钥或签名失败阻止公开发布。
+4. 同一次 draft release 上传 DMG、app.tar.gz、app.tar.gz.sig、latest.json 和证据，
+   然后统一转公开。只发布稳定递增版本，不覆盖已公开版本。
+
+没有编入公钥的本地构建显示“未配置”，且 debug 构建不能执行应用替换。
+v0.9.1 及以前没有这个客户端更新入口，必须先手动安装一次包含更新器的版本；
+后续才能应用内更新。离线、限流、缺少平台附件或清单时允许稍后手动重查，
+不回退到 unsigned DMG 执行，不自动安装，不在测试中替换 `/Applications` 应用。
+真实签名发布、已安装副本升级、更新后服务重启需各自授权验收；mock PASS 不能外推。

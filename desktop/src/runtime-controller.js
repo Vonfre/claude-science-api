@@ -22,6 +22,7 @@ export function createRuntimeController({
   setStatusText,
   setStatusRecoveryMsg,
   proxyRecoveryMessage,
+  ensureDirectoryAccess = async () => true,
 }) {
   let browserOpenInFlight = false;
   let doctorIntentInFlight = false;
@@ -337,10 +338,15 @@ async function importLocalSkill() {
 
 // ── 一键开始：先确认本次实际 Science runtime，再进入原启动链路。──
 async function oneClick() {
-  if (!(await checkOneClickBoundary())) return;
+  if (isBusy()) return;
+  if (!(await checkOneClickBoundary()) || isBusy()) return;
   setBusy(true, { kind: "oneClick" });
   setMsg("正在确认本次使用的 Claude Science…");
   try {
+    if (!(await ensureDirectoryAccess())) {
+      setMsg("已取消启动；没有更改目录权限。");
+      return;
+    }
     const preflight = await call("science_runtime_preflight");
     if (preflight && preflight.status === "installed_ready") {
       setBusy(false);

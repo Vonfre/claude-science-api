@@ -3,7 +3,7 @@ use std::process::Command;
 
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::lifecycle::RuntimeMutationDomain;
 use crate::runtime::capability_catalog::diagnostics_for_profile;
@@ -205,3 +205,41 @@ use status::{
 #[cfg(test)]
 #[path = "runtime/tests.rs"]
 pub(crate) mod tests;
+
+// Keep the existing stop ownership checks and replacement under one lifecycle
+// lease. request_restart preserves the native exit cleanup event path.
+pub(crate) async fn install_verified_app_update(
+    app: tauri::AppHandle,
+    state: SharedAppState,
+    lifecycle: SharedLifecycle,
+    update: tauri_plugin_updater::Update,
+    bytes: Vec<u8>,
+) -> Result<(), String> {
+    let restart_app = app.clone();
+    run_blocking(move || {
+        let coordination_app = app.clone();
+        let updates = coordination_app.state::<super::app_update::AppUpdateState>();
+        let installation = updates.claim_installation()?;
+        let result = lifecycle::stop_all_then_with(
+            app,
+            state,
+            lifecycle,
+            RuntimeMutationDomain::Terminal,
+            ScienceHostAdapter::claim_stop,
+            |app, request| ScienceHostAdapter::execute_stop(app, request).into_parts(),
+            || {
+                update
+                    .install(&bytes)
+                    .map_err(|_| "更新安装失败；请检查应用目录写入权限".to_string())?;
+                Ok(())
+            },
+        );
+        // Both the lifecycle lock and install gate must be released before
+        // posting restart, so its native exit cleanup can run on the UI thread.
+        drop(installation);
+        result?;
+        restart_app.request_restart();
+        Ok(())
+    })
+    .await
+}

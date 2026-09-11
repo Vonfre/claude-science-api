@@ -1,3 +1,5 @@
+import { createDirectoryAccess } from "./directory-access.js";
+import { createAppUpdateController } from "./app-update-controller.js";
 import {
   PREVIEW,
   PROFILE_INTERACTIVE_PREVIEW,
@@ -379,6 +381,24 @@ profileController = createProfileController({
   },
 });
 
+function dialogChoice(id) {
+  const dialog = $(id);
+  dialog.returnValue = "cancel";
+  return new Promise((resolve) => {
+    dialog.addEventListener("close", () => resolve(dialog.returnValue), { once: true });
+    dialog.showModal();
+  });
+}
+
+const ensureDirectoryAccess = createDirectoryAccess({
+  call, getConfigState: () => configState,
+  choose: () => dialogChoice("directoryAccessDialog"),
+  onGranted: () => {
+    els.allowScienceHostHome.checked = true;
+    runtimeController.hideHistoryRecovery();
+  },
+});
+
 runtimeController = createRuntimeController({
   els,
   getConfigState: () => configState,
@@ -400,6 +420,7 @@ runtimeController = createRuntimeController({
   setStatusText,
   setStatusRecoveryMsg,
   proxyRecoveryMessage,
+  ensureDirectoryAccess,
 });
 
 function wire() {
@@ -543,6 +564,33 @@ window.addEventListener("DOMContentLoaded", async () => {
   setPage("switch");
   $("previewNotice").hidden = !PREVIEW;
   await profileController.loadConfig();
+  $("directoryAccessBtn").addEventListener("click", async () => {
+    if (busy) return;
+    if (configState.allow_science_host_home) {
+      setPage("settings");
+      els.advSec.open = true;
+      els.allowScienceHostHome.focus();
+      return;
+    }
+    setBusy(true, { kind: "directoryAccess" });
+    try {
+      if (await ensureDirectoryAccess({ force: true })) {
+        setMsg(configState.allow_science_host_home
+          ? "本机目录权限已保存。请点击启动 Science，然后在 Science 内选择工作文件夹。"
+          : "本次使用隔离模式；本机目录仍未授权。");
+        await runtimeController.refreshStatus();
+      }
+    } catch (_) { setMsg("目录权限保存失败；未继续启动，请在设置中检查并重试。", "err"); }
+    finally { setBusy(false); }
+  });
+  const appUpdates = createAppUpdateController({
+    call, isBusy: () => busy, setBusy,
+    status: $("appUpdateStatus"), checkButton: $("checkAppUpdateBtn"),
+    installButton: $("installAppUpdateBtn"), notice: $("appUpdateNotice"),
+    confirm: async () => (await dialogChoice("appUpdateDialog")) === "install",
+    showSettings: () => setPage("settings"),
+  });
+  appUpdates.start({ automatic: !PREVIEW });
   const applyBootPublication = (publication) => {
     if (!publication || !Number.isSafeInteger(publication.sequence) || publication.sequence < 0) return;
     if (publication.sequence <= lastBootSequence) return;

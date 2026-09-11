@@ -25,6 +25,7 @@ jobs:
       BUILD_SHA: ${{ github.sha }}
       CARGO_INCREMENTAL: '0'
       RUSTUP_TOOLCHAIN: stable
+      SCIPORT_UPDATER_PUBLIC_KEY: ${{ vars.SCIPORT_UPDATER_PUBLIC_KEY }}
     steps:
       - name: Check out the exact release tag
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -57,6 +58,9 @@ jobs:
           bash -n scripts/package-sciport-release.sh
           python3 test/test_release_notes.py -v
           bash test/run-frontend.sh
+      - name: Require a release updater public key
+        shell: bash
+        run: test -n "$SCIPORT_UPDATER_PUBLIC_KEY"
       - name: Build the application and bundled Gateway
         shell: bash
         run: |
@@ -67,6 +71,12 @@ jobs:
       - name: Sign and package the installer
         shell: bash
         run: bash scripts/package-sciport-release.sh
+      - name: Package and verify signed app update
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: bash
+        run: bash scripts/package-sciport-updater.sh
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,6 +90,6 @@ jobs:
           else
             gh release create "$RELEASE_TAG" --verify-tag --draft --title "研舟 · SciPort $RELEASE_TAG" --notes-file "$RUNNER_TEMP/sciport-release/RELEASE_NOTES.md"
           fi
-          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/sciport-release/SciPort_${RELEASE_TAG#v}_aarch64.dmg" "$RUNNER_TEMP/sciport-release/SHA256SUMS" "$RUNNER_TEMP/sciport-release/BUILD_INFO.txt" --clobber
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/sciport-release/SciPort_${RELEASE_TAG#v}_aarch64.dmg" "$RUNNER_TEMP/sciport-release/SHA256SUMS" "$RUNNER_TEMP/sciport-release/BUILD_INFO.txt" "$RUNNER_TEMP/sciport-release/SciPort_${RELEASE_TAG#v}_aarch64.app.tar.gz" "$RUNNER_TEMP/sciport-release/SciPort_${RELEASE_TAG#v}_aarch64.app.tar.gz.sig" "$RUNNER_TEMP/sciport-release/latest.json" --clobber
           gh release edit "$RELEASE_TAG" --draft=false --latest --notes-file "$RUNNER_TEMP/sciport-release/RELEASE_NOTES.md"
           gh release view "$RELEASE_TAG" --json url,tagName,isDraft,assets

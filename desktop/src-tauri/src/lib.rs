@@ -659,7 +659,8 @@ fn run_native_exit_event<R: tauri::Runtime>(
     event: NativeExitEvent,
 ) -> GatewayStopOutcome {
     let cleanup = production_native_exit_cleanup();
-    run_native_exit_event_with(app, event, |app, _| cleanup(app))
+    app.state::<commands::app_update::AppUpdateState>()
+        .with_native_exit(|| run_native_exit_event_with(app, event, |app, _| cleanup(app)))
 }
 
 pub(crate) fn publish_boot_state<R: tauri::Runtime>(
@@ -1038,6 +1039,8 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(commands::app_update::AppUpdateState::default())
         .manage(Arc::new(Mutex::new(AppState::default())))
         .manage(Arc::new(lifecycle::Lifecycle::new()))
         .manage(Arc::new(CodexAuthSupervisor::default()))
@@ -1066,6 +1069,8 @@ pub fn run() {
             commands::runtime::open_url,
             commands::diagnostics::run_doctor_read_only,
             commands::diagnostics::app_version,
+            commands::app_update::check_app_update,
+            commands::app_update::install_app_update,
             commands::diagnostics::open_logs,
             commands::runtime::quit_app
         ]))

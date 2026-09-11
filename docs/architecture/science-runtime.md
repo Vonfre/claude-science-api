@@ -50,6 +50,13 @@ Gateway 进程就把它们都解释成 model routing：
 共同经过 `configure_science_home_access`；未授权时既不准备 Home 配置也不设置
 host-home 标志，不从旧配置或环境变量推断同意。
 
+前端 `directory-access.js` 在交互启动前提示目录访问方式，工作台提供常驻权限入口。
+它仅在 `set_settings` 回执确认提交后继续 host-home 启动；取消不保存、不启动，
+隔离选择只在本次面板会话内记忆。授权沿用既有配置字段，不迁移为默认同意。
+授权后用户在 Science 自己的目录选择器选择工作文件夹；HOME 外路径仍受 Science
+独立 granted-root 检查，本入口不会伪造授权，也不修复官方目录连接器登录。
+
+
 经用户明确接受官方 Home 行为后，Desktop cold start / recovery 由
 `runtime/science/home_layout.rs::prepare_science_host_home` 准备隔离配置，再由
 `ScienceHostAdapter::spawn_launch` 启用 daemon 的真实 host `HOME`。Science 原生

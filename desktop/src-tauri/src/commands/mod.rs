@@ -1,3 +1,4 @@
+pub(crate) mod app_update;
 pub(crate) mod codex;
 pub(crate) mod diagnostics;
 pub(crate) mod profiles;
