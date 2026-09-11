@@ -381,7 +381,7 @@ export function mockInvoke(cmd, args) {
       return Promise.resolve({ proxy: "green", sandbox: "green", upstream: "green" });
     case "boot_snapshot":
       return Promise.resolve({ sequence: 0, state: "idle", payload: null });
-    case "check_app_update": return { status: "not_configured", current_version: "0.9.1", version: null };
+    case "check_app_update": return { status: "not_configured", current_version: "0.9.2", version: null };
     case "install_app_update": throw new Error("预览不会安装应用更新");
     case "app_version":
       return Promise.resolve("0.0.0-preview");

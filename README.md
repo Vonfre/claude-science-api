@@ -6,7 +6,7 @@
 
 [中文](README.md) · [English](README.en.md)
 
-[下载 v0.9.1](https://github.com/Vonfre/claude-science-api/releases/tag/v0.9.1) · [反馈问题](https://github.com/Vonfre/claude-science-api/issues) · [项目文档](docs/README.md)
+[下载 v0.9.2](https://github.com/Vonfre/claude-science-api/releases/tag/v0.9.2) · [反馈问题](https://github.com/Vonfre/claude-science-api/issues) · [项目文档](docs/README.md)
 
 </div>
 
@@ -25,18 +25,24 @@
 - **区分状态层级**：本地网关、Science 健康检查、上游网络可达性分别显示，不把“网络可达”当作“密钥可用”。
 - **保持界面简洁**：工作台与设置两个入口，深浅主题，自检与日志按需展开。
 
-> **验证状态：** v0.9.1 修复 Release 说明生成失败。GitHub 构建前运行前端与发布说明回归检查；完整源码门禁、真实 Science 和供应商调用尚未验证。安装包以 GitHub Actions 实际成功结果为准，构建成功不代表所有功能通过。
+> **验证状态：** v0.9.2 新增启动前目录访问选择和签名应用更新。GitHub 构建前运行前端与发布说明回归检查；完整源码门禁、真实 Science 和供应商调用尚未验证。安装包以 GitHub Actions 实际成功结果为准，构建成功不代表所有功能通过。
 
 ## 下载与安装
 
 本次提供 **macOS Apple Silicon（M 系列芯片，arm64）** 安装包。未提供或验证 Intel、Windows、Linux 安装包。
 
-1. 从 [v0.9.1 Release](https://github.com/Vonfre/claude-science-api/releases/tag/v0.9.1) 下载 `SciPort_0.9.1_aarch64.dmg`。
+1. 从 [v0.9.2 Release](https://github.com/Vonfre/claude-science-api/releases/tag/v0.9.2) 下载 `SciPort_0.9.2_aarch64.dmg`。
 2. 确认已通过官方渠道安装 Claude Science。研舟不捆绑、不下载、不自动升级 Science。
 3. 打开 DMG，将 **SciPort.app** 拖到“应用程序”。
 4. 打开研舟，添加 API 连接。
 
 **签名说明：**本版使用本地 ad-hoc 签名，不具备 Apple Developer ID 签名或 Apple 公证。macOS 可能拦截首次打开。请先核对下载来源和 Release 的 SHA-256；确认信任后，按照系统“隐私与安全性”提供的打开选项处理。不要关闭系统整体安全保护。
+
+### 目录访问与应用更新
+
+启动前可选择允许 Science 使用本机主目录、仅本次使用隔离目录或取消；也可从工作台的目录入口修改。允许本机主目录需要阅读风险说明并明确同意。**这不是任意目录授权：HOME 外目录仍需 Science 自身授予 granted-root 权限**，也不会恢复过期的官方目录连接器会话。
+
+v0.9.1 及更早版本需要先手动安装本版一次。此后研舟会在启动时及每 6 小时检查 GitHub Release，发现新版后提示；点击并确认后下载、验证专用更新签名、停止服务、安装并重启。请先保存工作。更新仅针对 SciPort，不更新 Claude Science；更新签名不等同于 Apple 签名或公证。
 
 ### 从 CSSwitch 升级
 
@@ -84,7 +90,7 @@
 ```bash
 git clone https://github.com/Vonfre/claude-science-api.git
 cd claude-science-api
-git checkout v0.9.1
+git checkout v0.9.2
 npm ci --prefix desktop
 npm run tauri --prefix desktop -- build --bundles app
 ```

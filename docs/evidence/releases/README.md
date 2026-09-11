@@ -1,5 +1,6 @@
 # 发布证据索引
 
+- [v0.9.2](v0.9.2.md)：目录授权入口与签名更新的发布证据和未验证边界。
 - [v0.8.4](v0.8.4.md)：Science updater identity 与冷启动修复的 source gate、最终 DMG、安装身份、ad-hoc 签名边界和公开附件回读。
 - [v0.8.3](v0.8.3.md)：Science 0.1.25 / authority / reattach 主线的 tag、公开 DMG 元数据与可复核边界；本页创建时未补本地 seal/hash 或 live。
 - [v0.8.2](v0.8.2.md)：SSH/模型路由/更新 runtime/首次目录冷启动修复，最终 source、DMG、安装 UI 与公开附件复核。

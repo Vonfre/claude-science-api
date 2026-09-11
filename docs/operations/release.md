@@ -2,6 +2,10 @@
 
 发布是逐层建立证据，不是一次 `build` 或一次 `gh release`。Agent 的授权禁止项见[发布规则](../../.agents/rules/release.md)。
 
+## SciPort v0.9.2 维护者指定构建
+
+2026-09-11，维护者明确要求直接构建新 Release。本次在已有目录授权与更新功能聚焦检查基础上发布，保留完整源码门禁、真实 App 升级、Science 和 provider 未验证的披露，不将构建成功视为 SOURCE-GREEN。正式更新签名使用专用持久密钥，私钥仅保存在受限备份和 GitHub Secret，公钥经仓库变量编译进应用；旧公开 tag / Release 不覆盖。结果以[本版证据](../evidence/releases/v0.9.2.md)为准。
+
 ## SciPort v0.9.1 打包修复
 
 v0.9.1 在编译前新增前端与 Release 说明渲染回归检查，使用 `${RELEASE_TAG}` 明确中文标点前的变量边界。该聚焦检查不替代完整源码门禁，也不宣称真实 Science 或 provider 已验证。以下 v0.9.0 例外仅记录历史。
