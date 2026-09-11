@@ -52,6 +52,7 @@ fn stage_gateway_sidecar() {
         .current_dir(&gateway_dir)
         .env("CARGO_TARGET_DIR", &gateway_target_dir)
         .arg("build")
+        .arg("--locked")
         .arg("--release")
         .arg("--target")
         .arg(&target);

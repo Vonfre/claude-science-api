@@ -1,0 +1,77 @@
+name: Build SciPort macOS Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos-release:
+    if: github.repository == 'Vonfre/claude-science-api' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      BUILD_SHA: ${{ github.sha }}
+      CARGO_INCREMENTAL: '0'
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - name: Check out the exact release tag
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install Rust and the Apple Silicon target
+        run: rustup toolchain install stable --profile minimal --target aarch64-apple-darwin
+      - name: Check release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const expected = process.env.RELEASE_TAG.slice(1);
+          for (const path of ['desktop/package.json', 'desktop/package-lock.json', 'desktop/src-tauri/tauri.conf.json']) {
+            if (JSON.parse(fs.readFileSync(path)).version !== expected) throw new Error(`Version mismatch: ${path}`);
+          }
+          JS
+      - name: Build the application and bundled Gateway (no test suites)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --prefix desktop
+          npm run tauri --prefix desktop -- build --ci --target aarch64-apple-darwin --bundles app -- --locked
+          git diff --exit-code -- desktop/package-lock.json desktop/src-tauri/Cargo.lock desktop/gateway/Cargo.lock
+      - name: Sign and package the installer
+        shell: bash
+        run: bash scripts/package-sciport-release.sh
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Never overwrite an already-public version on a rerun.
+          if gh release view "$RELEASE_TAG" --json isDraft > "$RUNNER_TEMP/existing-release.json" 2>/dev/null; then
+            node -e 'if (!JSON.parse(require("fs").readFileSync(process.argv[1])).isDraft) process.exit(1)' "$RUNNER_TEMP/existing-release.json"
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "研舟 · SciPort $RELEASE_TAG" --notes-file "$RUNNER_TEMP/sciport-release/RELEASE_NOTES.md"
+          fi
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/sciport-release/SciPort_${RELEASE_TAG#v}_aarch64.dmg" "$RUNNER_TEMP/sciport-release/SHA256SUMS" "$RUNNER_TEMP/sciport-release/BUILD_INFO.txt" --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --latest --notes-file "$RUNNER_TEMP/sciport-release/RELEASE_NOTES.md"
+          gh release view "$RELEASE_TAG" --json url,tagName,isDraft,assets

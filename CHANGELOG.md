@@ -15,6 +15,8 @@
 
 ### Boundaries / 限制
 
+- 本次按维护者要求由 GitHub Actions 构建发布，不运行自动化测试套件；实际使用待维护者验证，不宣称完整源码门禁通过。 / Built and published on GitHub at the maintainer’s request without automated test suites; hands-on validation remains pending and full source-gate closure is not claimed.
+
 - macOS Apple Silicon only; ad-hoc signing, no Developer ID or Apple notarization.
 - Official directory-connector session errors remain unresolved. Model connectivity is not official account authorization.
 - Real-provider, real-account, and SSH-server calls are not claimed as validated by this release.

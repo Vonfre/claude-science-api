@@ -60,7 +60,7 @@ node --check desktop/src/main.js
 
 ## 远端协作与 CI 当前状态
 
-当前仓库没有 `.github/workflows/`，也没有已配置的 required check。PR 模板用于复核本地
+当前仓库提供 [macOS Release 构建](../../.github/workflows/release.yml)：推送版本 tag 后构建 Apple Silicon 安装包并发布到目标 GitHub 仓库。该流程只做构建及包完整性检查，不运行测试套件，也不建立 `SOURCE-GREEN`。没有已配置的 required check。PR 模板用于复核本地
 exact base / head、风险、变更面和实际执行的分层检查；它不把本地结果变成远端执行证据。
 
 当前决定暂不采用 CI：尚无 macOS runner 耗时或稳定性的实际证据，也未获得启用 required
